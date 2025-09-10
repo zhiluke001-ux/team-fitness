@@ -637,18 +637,11 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
 
 // --- Server-side guard: redirect anonymous users before rendering ---
 import type { GetServerSidePropsContext, GetServerSideProps } from "next";
+import { createServerSupabaseClient } from "../lib/supabaseServer";
 
 export const getServerSideProps: GetServerSideProps = async (ctx: GetServerSidePropsContext) => {
-  const { createServerSupabaseClient } = await import("@supabase/auth-helpers-nextjs");
-
-  const supabase = createServerSupabaseClient(ctx, {
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  });
-
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
+  const supabase = createServerSupabaseClient(ctx);
+  const { data: { session } } = await supabase.auth.getSession();
 
   if (!session) {
     const next = ctx.resolvedUrl || "/";
@@ -659,6 +652,6 @@ export const getServerSideProps: GetServerSideProps = async (ctx: GetServerSideP
       }
     };
   }
-
   return { props: {} };
 };
+
