@@ -17,8 +17,8 @@ export function createServerSupabaseClient(ctx: GetServerSidePropsContext) {
         },
         remove(name: string, options: CookieOptions) {
           ctx.res.setHeader('Set-Cookie', serialize(name, '', { ...options, maxAge: 0 }));
-        }
-      }
+        },
+      },
     }
   );
 }
