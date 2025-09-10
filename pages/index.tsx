@@ -541,14 +541,10 @@ function TeamPanel({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points this week</div>
+              <div className="text-sm text-gray-700">Total Team Points This Week</div>
               <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
             </div>
-            <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points </div>
-              <div className="mt-1 text-3xl font-bold">{totalPointsAllWeeks}</div>
-            </div>
-          </div>
+
 
           <MembersTable rows={rows} />
         </>
@@ -578,7 +574,7 @@ function SeasonPanel({ title, data }:{
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="card">
           <div className="text-sm text-gray-700 mb-2">
-            Total Team Points This Week: <strong>{Math.round(totals.basePoints)}</strong>
+            Total Team Points: <strong>{Math.round(totals.basePoints)}</strong>
           </div>
         </div>
         <div className="card">
