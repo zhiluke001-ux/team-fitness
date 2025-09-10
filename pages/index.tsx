@@ -260,7 +260,7 @@ export default function Home() {
   if (loadingSession) {
     return (
       <>
-        <Head><title>Team Fitness</title></Head>
+        <Head><title>ATAG Team Fitness Challenge 2025</title></Head>
         <main className="min-h-screen grid place-items-center px-4">
           <div className="card text-sm text-gray-700">Loading your session…</div>
         </main>
@@ -271,7 +271,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Team Fitness</title>
+        <title>ATAG Team Fitness Challenge 2025</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
@@ -283,8 +283,12 @@ export default function Home() {
         )}
 
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold">Team Fitness Dashboard</h1>
-          {userId && <button className="btn btn-primary" onClick={signOut}>Sign out</button>}
+          <h1 className="text-2xl md:text-3xl font-bold">ATAG Team Fitness Challenge 2025</h1>
+          {userId && (
+            <button className="btn btn-primary btn-compact" onClick={signOut}>
+              Sign out
+            </button>
+          )}
         </div>
 
         {!profile ? (
@@ -311,12 +315,14 @@ export default function Home() {
               <div className="card">
                 <div className="text-sm font-medium">Scoring</div>
                 <div className="text-xs text-gray-600 mt-1 space-y-1">
-                  <div>Every 1 km logged: {POINTS_SAFE.perKm} pts</div>
-                  <div>Every 1,000 calories burned: {POINTS_SAFE.per1000Calories} pts</div>
-                  <div>Each workout: {POINTS_SAFE.perWorkout} pts</div>
-                  <div>Each healthy meal: {POINTS_SAFE.perHealthyMeal} pts</div>
-                  <div>All members ≥2 workouts/week (auto): +{POINTS_SAFE.bonusAllMinWorkouts}</div>
-                  <div>Admin bonuses (Arthur): “Healthy Habits” + “Full Team Exercise” (+200 each, optional)</div>
+                  <div>Every 1 km logged 10 pts</div>
+                  <div>Every 1,000 calories burned 100 pts</div>
+                  <div>Number of workout 20 pts</div>
+                  <div>No of healthy meal 20 pts</div>
+                  <div>All members complete ≥ 2 workouts/week 200 pts</div>
+                  <div className="pt-1 border-t border-gray-100" />
+                  <div>Healthy Habits Bonus /week 200 pts</div>
+                  <div>Full Team Participation in an exercise 200 pts</div>
                 </div>
               </div>
             </div>
@@ -350,12 +356,12 @@ export default function Home() {
                     <Field label="Healthy meals" value={myRecord.meals} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, meals:v}))} />
                   </div>
 
-                  {/* Moved Save/Update BELOW the "Your points" line */}
+                  {/* Save/Update BELOW the "Your points" line */}
                   <div className="mt-4">
                     <div className="text-sm">
                       Your points this week: <span className="font-semibold">{myPoints}</span>
                     </div>
-                    <button className="btn btn-primary mt-3 w-full md:w-auto" onClick={save} disabled={saving}>
+                    <button className="btn btn-primary btn-compact mt-3 w-full md:w-auto" onClick={save} disabled={saving}>
                       {saving ? "Saving…" : "Save / Update"}
                     </button>
                   </div>
@@ -454,7 +460,7 @@ function Onboarding({ onDone }:{ onDone:(p:any)=>void }) {
           <option value="Jimmy">Team Jimmy</option>
         </select>
       </div>
-      <button className="btn btn-primary" type="submit" disabled={saving}>
+      <button className="btn btn-primary btn-compact" type="submit" disabled={saving}>
         {saving ? "Saving..." : "Save profile"}
       </button>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -533,14 +539,14 @@ function TeamPanel({
             <Stat label="Total Healthy Meals" value={totals.meals.toString()} />
           </div>
 
-          {/* NEW: Only show the two total points sections */}
+          {/* Only the two totals blocks */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points this week:</div>
+              <div className="text-sm text-gray-700">Total Team Points this week</div>
               <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
             </div>
             <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points (ALL weeks):</div>
+              <div className="text-sm text-gray-700">Total Team Points (ALL weeks)</div>
               <div className="mt-1 text-3xl font-bold">{totalPointsAllWeeks}</div>
             </div>
           </div>
