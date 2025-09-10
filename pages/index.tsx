@@ -578,11 +578,7 @@ function SeasonPanel({ title, data }:{
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="card">
           <div className="text-sm text-gray-700 mb-2">
-            Base points total: <strong>{Math.round(totals.basePoints)}</strong>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="badge badge-yes">✓ Weeks all ≥2 workouts: {bonuses.weeksAll2Count} (× +{POINTS_SAFE.bonusAllMinWorkouts})</span>
-            <span className="badge badge-yes">✓ Admin bonuses total: +{bonuses.manualSum}</span>
+            Total Team Points This Week: <strong>{Math.round(totals.basePoints)}</strong>
           </div>
         </div>
         <div className="card">
