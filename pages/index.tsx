@@ -3,7 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "../lib/supabaseClient";
 import * as Constants from "../utils/constants";
-import { RecordRow, Profile, TeamBonus, memberPoints, computeTeam } from "../utils/points";
+import {
+  RecordRow,
+  Profile,
+  TeamBonus,
+  memberPoints,
+  computeTeam,
+  computeTeamAcrossWeeks
+} from "../utils/points";
 
 const WEEKS_SAFE = Constants?.WEEKS ?? Array.from({ length: 24 }, (_, i) => i + 1);
 const POINTS_SAFE = Constants?.POINTS ?? {
@@ -33,19 +40,25 @@ export default function Home() {
   const [arthurRoster, setArthurRoster] = useState<Profile[]>([]);
   const [jimmyRoster, setJimmyRoster] = useState<Profile[]>([]);
 
-  // Records per team
+  // Records per SELECTED week
   const [arthurRows, setArthurRows] = useState<RecordRow[]>([]);
   const [jimmyRows, setJimmyRows] = useState<RecordRow[]>([]);
 
-  // Evidence gallery
+  // Evidence gallery (per week)
   const [arthurExercise, setArthurExercise] = useState<string[]>([]);
   const [arthurHabits, setArthurHabits] = useState<string[]>([]);
   const [jimmyExercise, setJimmyExercise] = useState<string[]>([]);
   const [jimmyHabits, setJimmyHabits] = useState<string[]>([]);
 
-  // Admin manual bonuses (display with reasons)
+  // Admin manual bonuses (per SELECTED week)
   const [arthurBonuses, setArthurBonuses] = useState<TeamBonus[]>([]);
   const [jimmyBonuses, setJimmyBonuses] = useState<TeamBonus[]>([]);
+
+  // NEW: All-weeks data (season totals)
+  const [arthurAllRows, setArthurAllRows] = useState<RecordRow[]>([]);
+  const [jimmyAllRows, setJimmyAllRows] = useState<RecordRow[]>([]);
+  const [arthurAllBonuses, setArthurAllBonuses] = useState<TeamBonus[]>([]);
+  const [jimmyAllBonuses, setJimmyAllBonuses] = useState<TeamBonus[]>([]);
 
   // Bootstrap session & profile
   useEffect(() => {
@@ -142,7 +155,22 @@ export default function Home() {
 
   useEffect(() => { fetchTeams(); }, [week]);
 
-  // Realtime subscriptions
+  // NEW: Fetch ALL-WEEKS data once and keep it fresh
+  async function refreshAllTotals() {
+    const { data: recs } = await supabase.from("records").select("*");
+    const list = (recs || []) as RecordRow[];
+    setArthurAllRows(list.filter(r => r.team === "Arthur"));
+    setJimmyAllRows(list.filter(r => r.team === "Jimmy"));
+
+    const { data: bons } = await supabase.from("team_bonuses").select("*");
+    const bList = (bons || []) as TeamBonus[];
+    setArthurAllBonuses(bList.filter(b => b.team === "Arthur"));
+    setJimmyAllBonuses(bList.filter(b => b.team === "Jimmy"));
+  }
+
+  useEffect(() => { refreshAllTotals(); }, []);
+
+  // Realtime for selected week
   useEffect(() => {
     if (!week) return;
     const recCh = supabase
@@ -161,8 +189,20 @@ export default function Home() {
     return () => { supabase.removeChannel(recCh); supabase.removeChannel(evCh); supabase.removeChannel(bonCh); };
   }, [week]);
 
+  // NEW: Realtime for ALL-WEEKS totals (no filter)
+  useEffect(() => {
+    const ch = supabase
+      .channel("all-weeks")
+      .on("postgres_changes", { event: "*", schema: "public", table: "records" }, refreshAllTotals)
+      .on("postgres_changes", { event: "*", schema: "public", table: "team_bonuses" }, refreshAllTotals)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  // My points (selected week)
   const myPoints = useMemo(() => (myRecord ? Math.round(memberPoints(myRecord)) : 0), [myRecord]);
 
+  // Team (selected week)
   const arthur = useMemo(
     () => computeTeam(arthurRoster, arthurRows, arthurBonuses),
     [arthurRows, arthurRoster, arthurBonuses]
@@ -170,6 +210,16 @@ export default function Home() {
   const jimmy = useMemo(
     () => computeTeam(jimmyRoster, jimmyRows, jimmyBonuses),
     [jimmyRows, jimmyRoster, jimmyBonuses]
+  );
+
+  // NEW: Season totals (all weeks)
+  const arthurAll = useMemo(
+    () => computeTeamAcrossWeeks(arthurRoster, arthurAllRows, arthurAllBonuses),
+    [arthurRoster, arthurAllRows, arthurAllBonuses]
+  );
+  const jimmyAll = useMemo(
+    () => computeTeamAcrossWeeks(jimmyRoster, jimmyAllRows, jimmyAllBonuses),
+    [jimmyRoster, jimmyAllRows, jimmyAllBonuses]
   );
 
   async function save() {
@@ -206,6 +256,19 @@ export default function Home() {
     return supabase.storage.from("team-evidence").getPublicUrl(path).data.publicUrl;
   }
 
+  // While server-side guard prevents anon users reaching this page,
+  // we still render a clean loading state for the first hydration
+  if (loadingSession) {
+    return (
+      <>
+        <Head><title>Team Fitness</title></Head>
+        <main className="min-h-screen grid place-items-center px-4">
+          <div className="card text-sm text-gray-700">Loading your session…</div>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <Head>
@@ -222,12 +285,10 @@ export default function Home() {
 
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl md:text-3xl font-bold">Team Fitness Dashboard</h1>
-          <button className="btn btn-primary" onClick={signOut}>Sign out</button>
+          {userId && <button className="btn btn-primary" onClick={signOut}>Sign out</button>}
         </div>
 
-        {loadingSession ? (
-          <p>Loading…</p>
-        ) : !profile ? (
+        {!profile ? (
           <div className="card max-w-lg">
             <h2 className="text-lg font-semibold mb-2">Complete your profile</h2>
             <Onboarding onDone={(p) => setProfile(p)} />
@@ -261,6 +322,17 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Season Totals (All Weeks) */}
+            <div className="card mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-semibold">Season Totals (All Weeks)</h2>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanel title="Team Arthur — All Weeks" data={arthurAll} />
+                <SeasonPanel title="Team Jimmy — All Weeks" data={jimmyAll} />
+              </div>
+            </div>
+
             {/* My editor */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -287,7 +359,7 @@ export default function Home() {
               {error && <p className="mt-3 text-sm text-red-600">Error: {error}</p>}
             </div>
 
-            {/* Team panels */}
+            {/* Team panels (selected week) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <TeamPanel
                 title="Team Arthur"
@@ -494,6 +566,43 @@ function TeamPanel({
   );
 }
 
+function SeasonPanel({ title, data }:{
+  title: string;
+  data: {
+    totals: { km:number; calories:number; workouts:number; meals:number; basePoints:number };
+    bonuses: { weeksAll2Count:number; manualSum:number };
+    totalPoints: number;
+  };
+}) {
+  const { totals, bonuses, totalPoints } = data;
+  return (
+    <div className="card">
+      <div className="text-lg font-semibold mb-3">{title}</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <Stat label="KM (all weeks)" value={totals.km.toFixed(1)} />
+        <Stat label="Calories (all weeks)" value={Math.round(totals.calories).toString()} />
+        <Stat label="Workouts (all weeks)" value={totals.workouts.toString()} />
+        <Stat label="Meals (all weeks)" value={totals.meals.toString()} />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="card">
+          <div className="text-sm text-gray-700 mb-2">
+            Base points total: <strong>{Math.round(totals.basePoints)}</strong>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge ok={bonuses.weeksAll2Count > 0} text={`Weeks all ≥2 workouts: ${bonuses.weeksAll2Count} (× +${POINTS_SAFE.bonusAllMinWorkouts})`} />
+            <Badge ok={bonuses.manualSum > 0} text={`Admin bonuses total: +${bonuses.manualSum}`} />
+          </div>
+        </div>
+        <div className="card">
+          <div className="text-sm text-gray-700">Total team points (ALL weeks):</div>
+          <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Stat({ label, value }:{ label:string; value:string }) {
   return (
     <div className="card">
@@ -539,3 +648,31 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
     </div>
   );
 }
+
+// --- Server-side guard: redirect anonymous users before rendering ---
+import type { GetServerSidePropsContext, GetServerSideProps } from "next";
+
+export const getServerSideProps: GetServerSideProps = async (ctx: GetServerSidePropsContext) => {
+  const { createServerSupabaseClient } = await import("@supabase/auth-helpers-nextjs");
+
+  const supabase = createServerSupabaseClient(ctx, {
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  });
+
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    const next = ctx.resolvedUrl || "/";
+    return {
+      redirect: {
+        destination: `/login?next=${encodeURIComponent(next)}`,
+        permanent: false
+      }
+    };
+  }
+
+  return { props: {} };
+};
