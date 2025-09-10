@@ -1,39 +1,61 @@
-import { useRouter } from "next/router";
-import { useEffect } from "react";
-import { supabase } from "../../lib/supabaseClient";
+// pages/auth/callback.tsx
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { supabase } from '../../lib/supabaseClient';
+import type { EmailOtpType } from '@supabase/supabase-js';
 
-export default function Callback() {
+export default function AuthCallback() {
   const router = useRouter();
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const nextParam = (router.query.next as string) || "/";
-      const goNext = () => router.replace(nextParam);
-
+    async function run() {
       try {
-        // 1) New flow: ?code=...
-        const code = router.query.code as string | undefined;
-        if (code) {
-          await supabase.auth.exchangeCodeForSession(code);
-          return goNext();
+        // Support PKCE "token_hash" (verifyOtp) AND implicit #access_token flow.
+        const url = new URL(window.location.href);
+        const next = url.searchParams.get('next') ?? '/';
+
+        // 1) PKCE (if you ever switch your email template to token_hash)
+        const token_hash = url.searchParams.get('token_hash');
+        const type = (url.searchParams.get('type') as EmailOtpType | null) ?? null;
+        if (token_hash && type) {
+          const { error } = await supabase.auth.verifyOtp({ type, token_hash });
+          if (error) throw error;
+          router.replace(next);
+          return;
         }
-        // 2) Old/hash flow: #access_token=&refresh_token=
-        if (typeof window !== "undefined" && window.location.hash) {
-          const hash = new URLSearchParams(window.location.hash.slice(1));
-          const access_token = hash.get("access_token");
-          const refresh_token = hash.get("refresh_token");
+
+        // 2) Implicit flow (#access_token in URL hash) – default Magic Link
+        if (window.location.hash) {
+          const params = new URLSearchParams(window.location.hash.substring(1));
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
           if (access_token && refresh_token) {
-            await supabase.auth.setSession({ access_token, refresh_token });
-            return goNext();
+            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+            if (error) throw error;
+            router.replace(next);
+            return;
           }
         }
-        // 3) Already signed in?
-        const { data } = await supabase.auth.getSession();
-        if (data.session) return goNext();
-      } catch {}
-      goNext();
-    })();
+
+        // If neither pattern matched, send them to login with a message
+        router.replace('/login?msg=invalid_link');
+      } catch (e: any) {
+        console.error(e);
+        setErr(e?.message ?? 'Unexpected error');
+      }
+    }
+    run();
   }, [router]);
 
-  return <p style={{ padding: 16 }}>Signing you in…</p>;
+  return (
+    <div className="min-h-screen grid place-items-center p-8">
+      <div className="max-w-sm w-full text-center">
+        <h1 className="text-xl font-semibold mb-2">Signing you in…</h1>
+        <p className="text-gray-600">Please wait a moment.</p>
+        {err && <p className="mt-4 text-red-600 text-sm">{err}</p>}
+      </div>
+    </div>
+  );
 }
+  
