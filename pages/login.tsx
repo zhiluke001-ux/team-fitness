@@ -11,7 +11,10 @@ export default function Login() {
 
   useEffect(() => {
     const sub = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session) router.replace("/");
+      if (session) {
+        const next = (router.query.next as string) || "/";
+        router.replace(next);
+      }
     });
     return () => sub.data.subscription.unsubscribe();
   }, [router]);
@@ -19,10 +22,21 @@ export default function Login() {
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
     setError(undefined);
+    const next =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next") || "/"
+        : "/";
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined }
+      options: {
+        emailRedirectTo:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+            : undefined,
+      },
     });
+
     if (error) setError(error.message);
     else setSent(true);
   }
@@ -35,7 +49,9 @@ export default function Login() {
           <h1 className="text-2xl font-bold mb-2">Sign in</h1>
           <p className="text-sm text-gray-600 mb-4">We’ll email you a magic link.</p>
           {sent ? (
-            <p className="text-sm">Check your inbox to finish signing in.</p>
+            <p className="text-sm">
+              Check your inbox and open the link on this device. You’ll be sent back here automatically.
+            </p>
           ) : (
             <form onSubmit={sendMagicLink} className="space-y-3">
               <div>
