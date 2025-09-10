@@ -34,3 +34,6 @@ body {
 .badge-no {
   @apply bg-gray-100 text-gray-600 ring-1 ring-gray-200;
 }
+.btn-compact {
+  @apply px-3 py-1.5 text-sm whitespace-nowrap;
+}
