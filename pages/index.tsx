@@ -193,21 +193,53 @@ export default function Home() {
   );
 }
 
-function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
+function Onboarding({ onDone }:{ onDone:(p:any)=>void }) {
   const [name, setName] = useState("");
   const [team, setTeam] = useState<"Arthur"|"Jimmy">("Arthur");
   const [error, setError] = useState<string>();
+  const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(undefined);
-    const { data: session } = await supabase.auth.getSession();
-    const uid = session.session?.user.id;
-    if (!uid) return;
+    setSaving(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const uid = session.session?.user.id;
+      if (!uid) { setError("Not signed in."); return; }
 
-    const { error } = await supabase.from("profiles").insert({ id: uid, name, team });
-    if (error) { setError(error.message); return; }
-    onDone({ id: uid, name, team });
+      // Try to insert, but if row exists already, fall back to fetching it
+      const { data, error: insErr } = await supabase
+        .from("profiles")
+        .insert({ id: uid, name, team })
+        .select("*")
+        .single();
+
+      if (insErr) {
+        // Duplicate name is the most common failure (unique constraint)
+        if ((insErr as any).code === "23505" || /duplicate key|unique/i.test(insErr.message)) {
+          setError("That display name is already taken. Please choose a different one.");
+          return;
+        }
+        // If the row already exists for this user (rare),
+        // just fetch it and continue
+        const { data: existing, error: selErr } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", uid)
+          .single();
+        if (selErr || !existing) {
+          setError(insErr.message || "Could not save profile.");
+          return;
+        }
+        onDone(existing);
+        return;
+      }
+
+      onDone(data);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -223,7 +255,7 @@ function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
           <option value="Jimmy">Team Jimmy</option>
         </select>
       </div>
-      <button className="btn btn-primary" type="submit">Save profile</button>
+      <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </form>
   );
