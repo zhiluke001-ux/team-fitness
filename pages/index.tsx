@@ -11,6 +11,7 @@ import {
   computeTeam,
   computeTeamAcrossWeeks
 } from "../utils/points";
+import { SITE_NAME } from "../utils/constants";
 
 const WEEKS_SAFE = Constants?.WEEKS ?? Array.from({ length: 24 }, (_, i) => i + 1);
 const POINTS_SAFE = Constants?.POINTS ?? {
@@ -256,11 +257,10 @@ export default function Home() {
     return supabase.storage.from("team-evidence").getPublicUrl(path).data.publicUrl;
   }
 
-  // Clean loading state for first hydration
   if (loadingSession) {
     return (
       <>
-        <Head><title>ATAG Team Fitness Challenge 2025</title></Head>
+        <Head><title>{SITE_NAME}</title></Head>
         <main className="min-h-screen grid place-items-center px-4">
           <div className="card text-sm text-gray-700">Loading your session…</div>
         </main>
@@ -271,7 +271,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>ATAG Team Fitness Challenge 2025</title>
+        <title>{SITE_NAME}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
@@ -283,7 +283,7 @@ export default function Home() {
         )}
 
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold">ATAG Team Fitness Challenge 2025</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">{SITE_NAME}</h1>
           {userId && (
             <button className="btn btn-primary btn-compact" onClick={signOut}>
               Sign out
@@ -356,7 +356,6 @@ export default function Home() {
                     <Field label="Healthy meals" value={myRecord.meals} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, meals:v}))} />
                   </div>
 
-                  {/* Save/Update BELOW the "Your points" line */}
                   <div className="mt-4">
                     <div className="text-sm">
                       Your points this week: <span className="font-semibold">{myPoints}</span>
@@ -539,7 +538,6 @@ function TeamPanel({
             <Stat label="Total Healthy Meals" value={totals.meals.toString()} />
           </div>
 
-          {/* Only the two totals blocks */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
               <div className="text-sm text-gray-700">Total Team Points this week</div>
