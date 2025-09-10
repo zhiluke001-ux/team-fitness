@@ -2,7 +2,7 @@ import Head from "next/head";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "../lib/supabaseClient";
-import { WEEKS } from "../utils/constants";
+import { WEEKS, SITE_NAME } from "../utils/constants";
 
 type Team = "Arthur" | "Jimmy";
 type TeamBonus = { id: string; team: Team; week: number; points: number; reason: string; created_at: string };
@@ -78,16 +78,16 @@ export default function Admin() {
 
   if (!me) return (
     <>
-      <Head><title>Admin — ATAG Team Fitness Challenge 2025</title></Head>
+      <Head><title>Admin — {SITE_NAME}</title></Head>
       <p style={{ padding: 16 }}>Loading…</p>
     </>
   );
 
   return (
     <>
-      <Head><title>Admin — ATAG Team Fitness Challenge 2025</title></Head>
+      <Head><title>Admin — {SITE_NAME}</title></Head>
       <main className="mx-auto max-w-3xl p-4">
-        <h1 className="text-2xl font-bold mb-4">Admin Panel — ATAG Team Fitness Challenge 2025</h1>
+        <h1 className="text-2xl font-bold mb-4">Admin Panel — {SITE_NAME}</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           <div>
@@ -182,7 +182,6 @@ export const getServerSideProps: GetServerSideProps = async (ctx: GetServerSideP
     };
   }
 
-  // Check role from profiles table
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
