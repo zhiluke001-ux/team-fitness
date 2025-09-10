@@ -1,25 +1,22 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "../lib/supabaseClient";
 import { WEEKS } from "../utils/constants";
 
 type Team = "Arthur" | "Jimmy";
-type AdminProfile = { id: string; name: string; role: "admin" | "member" };
 type TeamBonus = { id: string; team: Team; week: number; points: number; reason: string; created_at: string };
 type EvidenceRow = { id: string; team: Team; week: number; kind: "exercise"|"habits"; image_path: string; created_at: string };
 
 export default function Admin() {
   const router = useRouter();
-  const [me, setMe] = useState<AdminProfile | null>(null);
+  const [me, setMe] = useState<{ id: string; name: string; role: string } | null>(null);
 
   const [team, setTeam] = useState<Team>("Arthur");
   const [week, setWeek] = useState<number | null>(null);
 
-  // Bonus form
   const [reason, setReason] = useState("Healthy Habits Bonus (team-wide complete)");
   const [points, setPoints] = useState(200);
 
-  // Data
   const [bonuses, setBonuses] = useState<TeamBonus[]>([]);
   const [photos, setPhotos] = useState<EvidenceRow[]>([]);
 
@@ -31,49 +28,33 @@ export default function Admin() {
       const { data } = await supabase.auth.getSession();
       const uid = data.session?.user.id;
       if (!uid) { router.replace("/login?next=/admin"); return; }
-      const { data: p } = await supabase
-        .from("profiles")
-        .select("id,name,role")
-        .eq("id", uid)
-        .maybeSingle();
+      const { data: p } = await supabase.from("profiles").select("id,name,role").eq("id", uid).maybeSingle();
       if (!p || p.role !== "admin") { router.replace("/"); return; }
-      // ✅ No `any` here
-      setMe({ id: String(p.id), name: String(p.name), role: "admin" });
+      setMe(p as any);
     })();
   }, [router]);
 
-  const refreshData = useCallback(async () => {
-    if (!week) return;
-    const { data: b } = await supabase
-      .from("team_bonuses")
-      .select("*")
-      .eq("team", team)
-      .eq("week", week)
-      .order("created_at", { ascending: false });
-    setBonuses((b || []) as TeamBonus[]);
-
-    const { data: e } = await supabase
-      .from("team_evidence")
-      .select("*")
-      .eq("team", team)
-      .eq("week", week)
-      .order("created_at", { ascending: false });
-    setPhotos((e || []) as EvidenceRow[]);
-  }, [team, week]);
-
   useEffect(() => {
     if (!week) { setBonuses([]); setPhotos([]); return; }
-    void refreshData();
-  }, [team, week, refreshData]);
+    refreshData();
+  }, [team, week]);
+
+  async function refreshData() {
+    if (!week) return;
+    const { data: b } = await supabase.from("team_bonuses").select("*").eq("team", team).eq("week", week).order("created_at", { ascending: false });
+    setBonuses((b || []) as TeamBonus[]);
+    const { data: e } = await supabase.from("team_evidence").select("*").eq("team", team).eq("week", week).order("created_at", { ascending: false });
+    setPhotos((e || []) as EvidenceRow[]);
+  }
 
   async function addBonus(customReason?: string, customPoints?: number) {
-    if (!week || !me) return setError("Pick a week first.");
+    if (!week) return setError("Pick a week first.");
     setError(undefined); setOk(undefined);
     const r = (customReason ?? reason).trim();
     const pts = Number(customPoints ?? points) || 0;
     if (!r || !pts) return setError("Enter a reason and points.");
     const { error: insErr } = await supabase.from("team_bonuses").insert({
-      team, week, points: pts, reason: r, created_by: me.id
+      team, week, points: pts, reason: r, created_by: me!.id
     });
     if (insErr) return setError(insErr.message);
     setOk(`Added +${pts} "${r}" to ${team} week ${week}.`);
@@ -81,13 +62,13 @@ export default function Admin() {
   }
 
   async function upload(kind: "exercise" | "habits", file: File) {
-    if (!week || !me) return setError("Pick a week first.");
+    if (!week) return setError("Pick a week first.");
     setError(undefined); setOk(undefined);
     const path = `${team}/${week}/${kind}-${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
     const { error: upErr } = await supabase.storage.from("team-evidence").upload(path, file, { upsert: true });
     if (upErr) return setError(upErr.message);
     const { error: insErr } = await supabase.from("team_evidence").insert({
-      team, week, kind, image_path: path, submitted_by: me.id, approved: true
+      team, week, kind, image_path: path, submitted_by: me!.id, approved: true
     });
     if (insErr) return setError(insErr.message);
     setOk(`Uploaded ${kind} photo for ${team} week ${week}.`);
@@ -112,9 +93,7 @@ export default function Admin() {
           <label className="block text-sm font-medium mb-1">Week</label>
           <select className="input" value={week ?? ""} onChange={(e) => setWeek(Number(e.target.value) || null)}>
             <option value="">Select…</option>
-            {WEEKS.map((w) => (
-              <option key={w} value={w}>{w}</option>
-            ))}
+            {WEEKS.map((w) => <option key={w} value={w}>{w}</option>)}
           </select>
         </div>
       </div>
@@ -144,7 +123,7 @@ export default function Admin() {
         )}
       </div>
 
-      {/* B) Upload gallery photos (independent/optional) */}
+      {/* B) Upload gallery photos (optional) */}
       <div className="card mb-4">
         <div className="font-semibold mb-2">Upload gallery photos (optional)</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
