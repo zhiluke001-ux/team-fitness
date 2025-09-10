@@ -30,15 +30,16 @@ export default function Home() {
   const [arthurBonuses, setArthurBonuses] = useState<TeamBonus[]>([]);
   const [jimmyBonuses, setJimmyBonuses] = useState<TeamBonus[]>([]);
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user.id;
-      if (!uid) {
-        const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
-        router.replace(`/login?next=${encodeURIComponent(next)}`);
-        return;
-      }
+    useEffect(() => {
+      (async () => {
+        const { data } = await supabase.auth.getSession();
+        const uid = data.session?.user.id;
+        if (!uid) return;
+        const { data: prof, error } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+        if (!error && prof) setProfile(prof as any);
+      })();
+    }, []);
+
       setUserId(uid);
       const { data: prof } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
       setProfile((prof as Profile) ?? null);
