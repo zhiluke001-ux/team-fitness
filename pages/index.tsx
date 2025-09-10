@@ -320,23 +320,13 @@ export default function Home() {
                   <div>Number of workout 20 pts</div>
                   <div>No of healthy meal 20 pts</div>
                   <div>All members complete ≥ 2 workouts/week 200 pts</div>
-                  <div className="pt-1 border-t border-gray-100" />
                   <div>Healthy Habits Bonus /week 200 pts</div>
-                  <div>Full Team Participation in an exercise 200 pts</div>
+                  <div>Full Team Participation in an exercise /week 200 pts</div>
+                  <div className="pt-1 border-t border-gray-100" />
                 </div>
               </div>
             </div>
 
-            {/* Season Totals (All Weeks) */}
-            <div className="card mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold">Season Totals (All Weeks)</h2>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanel title="Team Arthur — All Weeks" data={arthurAll} />
-                <SeasonPanel title="Team Jimmy — All Weeks" data={jimmyAll} />
-              </div>
-            </div>
 
             {/* My editor */}
             <div className="card mb-6">
@@ -393,6 +383,17 @@ export default function Home() {
                 habitsPhotos={jimmyHabits}
                 publicUrl={publicUrl}
               />
+            </div>
+           
+            {/* Season Totals (All Weeks) */}
+            <div className="card mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-semibold">Total Team Points</h2>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanel title="Team Arthur — All Weeks" data={arthurAll} />
+                <SeasonPanel title="Team Jimmy — All Weeks" data={jimmyAll} />
+              </div>
             </div>
           </>
         )}
