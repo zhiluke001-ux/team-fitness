@@ -1,8 +1,7 @@
-// pages/auth/callback.tsx
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-import { supabase } from '../../lib/supabaseClient';
-import type { EmailOtpType } from '@supabase/supabase-js';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { supabase } from "../../lib/supabaseClient";
+import type { EmailOtpType } from "@supabase/supabase-js";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -11,13 +10,12 @@ export default function AuthCallback() {
   useEffect(() => {
     async function run() {
       try {
-        // Support PKCE "token_hash" (verifyOtp) AND implicit #access_token flow.
         const url = new URL(window.location.href);
-        const next = url.searchParams.get('next') ?? '/';
+        const next = url.searchParams.get("next") ?? "/";
 
-        // 1) PKCE (if you ever switch your email template to token_hash)
-        const token_hash = url.searchParams.get('token_hash');
-        const type = (url.searchParams.get('type') as EmailOtpType | null) ?? null;
+        // PKCE token_hash flow
+        const token_hash = url.searchParams.get("token_hash");
+        const type = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
         if (token_hash && type) {
           const { error } = await supabase.auth.verifyOtp({ type, token_hash });
           if (error) throw error;
@@ -25,24 +23,26 @@ export default function AuthCallback() {
           return;
         }
 
-        // 2) Implicit flow (#access_token in URL hash) – default Magic Link
+        // Implicit hash flow (#access_token)
         if (window.location.hash) {
           const params = new URLSearchParams(window.location.hash.substring(1));
-          const access_token = params.get('access_token');
-          const refresh_token = params.get('refresh_token');
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
           if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+            const { error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token
+            });
             if (error) throw error;
             router.replace(next);
             return;
           }
         }
 
-        // If neither pattern matched, send them to login with a message
-        router.replace('/login?msg=invalid_link');
+        router.replace("/login?msg=invalid_link");
       } catch (e: any) {
         console.error(e);
-        setErr(e?.message ?? 'Unexpected error');
+        setErr(e?.message ?? "Unexpected error");
       }
     }
     run();
@@ -58,4 +58,3 @@ export default function AuthCallback() {
     </div>
   );
 }
-  
