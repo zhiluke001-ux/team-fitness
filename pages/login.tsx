@@ -51,7 +51,7 @@ export default function Login() {
   return (
     <>
       <Head>
-        <title>Login — {SITE_NAME}</title>
+        <title>Sign In </title>
       </Head>
       <main className="min-h-screen grid place-items-center px-4">
         <div className="card w-full max-w-md">
