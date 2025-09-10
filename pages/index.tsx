@@ -391,8 +391,8 @@ export default function Home() {
                 <h2 className="text-lg font-semibold">Total Team Points</h2>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanel title="Team Arthur — All Weeks" data={arthurAll} />
-                <SeasonPanel title="Team Jimmy — All Weeks" data={jimmyAll} />
+                <SeasonPanel title="Team Arthur" data={arthurAll} />
+                <SeasonPanel title="Team Jimmy" data={jimmyAll} />
               </div>
             </div>
           </>
@@ -545,7 +545,7 @@ function TeamPanel({
               <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
             </div>
             <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points (ALL weeks)</div>
+              <div className="text-sm text-gray-700">Total Team Points </div>
               <div className="mt-1 text-3xl font-bold">{totalPointsAllWeeks}</div>
             </div>
           </div>
@@ -570,10 +570,10 @@ function SeasonPanel({ title, data }:{
     <div className="card">
       <div className="text-lg font-semibold mb-3">{title}</div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <Stat label="KM (all weeks)" value={totals.km.toFixed(1)} />
-        <Stat label="Calories (all weeks)" value={Math.round(totals.calories).toString()} />
-        <Stat label="Workouts (all weeks)" value={totals.workouts.toString()} />
-        <Stat label="Meals (all weeks)" value={totals.meals.toString()} />
+        <Stat label="KM walked/run" value={totals.km.toFixed(1)} />
+        <Stat label="Calories burned" value={Math.round(totals.calories).toString()} />
+        <Stat label="Workouts" value={totals.workouts.toString()} />
+        <Stat label="Healthy meals" value={totals.meals.toString()} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="card">
@@ -582,7 +582,7 @@ function SeasonPanel({ title, data }:{
           </div>
         </div>
         <div className="card">
-          <div className="text-sm text-gray-700">Total team points (ALL weeks):</div>
+          <div className="text-sm text-gray-700">Total team points:</div>
           <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
         </div>
       </div>
