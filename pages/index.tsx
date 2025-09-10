@@ -54,7 +54,7 @@ export default function Home() {
   const [arthurBonuses, setArthurBonuses] = useState<TeamBonus[]>([]);
   const [jimmyBonuses, setJimmyBonuses] = useState<TeamBonus[]>([]);
 
-  // NEW: All-weeks data (season totals)
+  // All-weeks data (season totals)
   const [arthurAllRows, setArthurAllRows] = useState<RecordRow[]>([]);
   const [jimmyAllRows, setJimmyAllRows] = useState<RecordRow[]>([]);
   const [arthurAllBonuses, setArthurAllBonuses] = useState<TeamBonus[]>([]);
@@ -155,7 +155,7 @@ export default function Home() {
 
   useEffect(() => { fetchTeams(); }, [week]);
 
-  // NEW: Fetch ALL-WEEKS data once and keep it fresh
+  // Fetch ALL-WEEKS data once and keep it fresh
   async function refreshAllTotals() {
     const { data: recs } = await supabase.from("records").select("*");
     const list = (recs || []) as RecordRow[];
@@ -189,7 +189,7 @@ export default function Home() {
     return () => { supabase.removeChannel(recCh); supabase.removeChannel(evCh); supabase.removeChannel(bonCh); };
   }, [week]);
 
-  // NEW: Realtime for ALL-WEEKS totals (no filter)
+  // Realtime for ALL-WEEKS totals (no filter)
   useEffect(() => {
     const ch = supabase
       .channel("all-weeks")
@@ -212,7 +212,7 @@ export default function Home() {
     [jimmyRows, jimmyRoster, jimmyBonuses]
   );
 
-  // NEW: Season totals (all weeks)
+  // Season totals (all weeks)
   const arthurAll = useMemo(
     () => computeTeamAcrossWeeks(arthurRoster, arthurAllRows, arthurAllBonuses),
     [arthurRoster, arthurAllRows, arthurAllBonuses]
@@ -256,8 +256,7 @@ export default function Home() {
     return supabase.storage.from("team-evidence").getPublicUrl(path).data.publicUrl;
   }
 
-  // While server-side guard prevents anon users reaching this page,
-  // we still render a clean loading state for the first hydration
+  // Clean loading state for first hydration
   if (loadingSession) {
     return (
       <>
@@ -350,9 +349,15 @@ export default function Home() {
                     <Field label="Workouts" value={myRecord.workouts} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, workouts:v}))} />
                     <Field label="Healthy meals" value={myRecord.meals} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, meals:v}))} />
                   </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="text-sm">Your points this week: <span className="font-semibold">{myPoints}</span></div>
-                    <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save / Update"}</button>
+
+                  {/* Moved Save/Update BELOW the "Your points" line */}
+                  <div className="mt-4">
+                    <div className="text-sm">
+                      Your points this week: <span className="font-semibold">{myPoints}</span>
+                    </div>
+                    <button className="btn btn-primary mt-3 w-full md:w-auto" onClick={save} disabled={saving}>
+                      {saving ? "Saving…" : "Save / Update"}
+                    </button>
                   </div>
                 </>
               )}
@@ -365,26 +370,22 @@ export default function Home() {
                 title="Team Arthur"
                 week={week}
                 totals={arthur.totals}
-                manualSum={arthur.bonuses.manualSum}
-                everyHas2Workouts={arthur.bonuses.everyHas2Workouts}
                 totalPoints={Math.round(arthur.totalPoints)}
+                totalPointsAllWeeks={Math.round(arthurAll.totalPoints)}
                 rows={arthurRows}
                 exercisePhotos={arthurExercise}
                 habitsPhotos={arthurHabits}
-                bonusList={arthurBonuses}
                 publicUrl={publicUrl}
               />
               <TeamPanel
                 title="Team Jimmy"
                 week={week}
                 totals={jimmy.totals}
-                manualSum={jimmy.bonuses.manualSum}
-                everyHas2Workouts={jimmy.bonuses.everyHas2Workouts}
                 totalPoints={Math.round(jimmy.totalPoints)}
+                totalPointsAllWeeks={Math.round(jimmyAll.totalPoints)}
                 rows={jimmyRows}
                 exercisePhotos={jimmyExercise}
                 habitsPhotos={jimmyHabits}
-                bonusList={jimmyBonuses}
                 publicUrl={publicUrl}
               />
             </div>
@@ -476,25 +477,21 @@ function TeamPanel({
   title,
   week,
   totals,
-  manualSum,
-  everyHas2Workouts,
   totalPoints,
+  totalPointsAllWeeks,
   rows,
   exercisePhotos,
   habitsPhotos,
-  bonusList,
   publicUrl
 }:{
   title: string;
   week: number | null;
   totals: { km:number; calories:number; workouts:number; meals:number; basePoints:number };
-  manualSum: number;
-  everyHas2Workouts: boolean;
-  totalPoints: number;
+  totalPoints: number;                 // weekly
+  totalPointsAllWeeks: number;         // season/all weeks
   rows: RecordRow[];
   exercisePhotos: string[];
   habitsPhotos: string[];
-  bonusList: TeamBonus[];
   publicUrl: (p?:string)=>string;
 }) {
   return (
@@ -536,26 +533,15 @@ function TeamPanel({
             <Stat label="Total Healthy Meals" value={totals.meals.toString()} />
           </div>
 
+          {/* NEW: Only show the two total points sections */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
-              <div className="text-sm text-gray-700 mb-2">
-                Base points (sum of members): <strong>{Math.round(totals.basePoints)}</strong>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge ok={everyHas2Workouts} text={`All ≥2 workouts (+${POINTS_SAFE.bonusAllMinWorkouts})`} />
-                <Badge ok={manualSum > 0} text={`Admin bonuses (+${manualSum})`} />
-              </div>
-              {bonusList.length > 0 && (
-                <ul className="list-disc ml-5 text-sm mt-2">
-                  {bonusList.map(b => (
-                    <li key={b.id}>{b.reason} (+{b.points})</li>
-                  ))}
-                </ul>
-              )}
+              <div className="text-sm text-gray-700">Total Team Points this week:</div>
+              <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
             </div>
             <div className="card">
-              <div className="text-sm text-gray-700">Total team points (incl. bonuses):</div>
-              <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
+              <div className="text-sm text-gray-700">Total Team Points (ALL weeks):</div>
+              <div className="mt-1 text-3xl font-bold">{totalPointsAllWeeks}</div>
             </div>
           </div>
 
@@ -590,8 +576,8 @@ function SeasonPanel({ title, data }:{
             Base points total: <strong>{Math.round(totals.basePoints)}</strong>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge ok={bonuses.weeksAll2Count > 0} text={`Weeks all ≥2 workouts: ${bonuses.weeksAll2Count} (× +${POINTS_SAFE.bonusAllMinWorkouts})`} />
-            <Badge ok={bonuses.manualSum > 0} text={`Admin bonuses total: +${bonuses.manualSum}`} />
+            <span className="badge badge-yes">✓ Weeks all ≥2 workouts: {bonuses.weeksAll2Count} (× +{POINTS_SAFE.bonusAllMinWorkouts})</span>
+            <span className="badge badge-yes">✓ Admin bonuses total: +{bonuses.manualSum}</span>
           </div>
         </div>
         <div className="card">
@@ -610,10 +596,6 @@ function Stat({ label, value }:{ label:string; value:string }) {
       <div className="text-xl font-semibold">{value}</div>
     </div>
   );
-}
-
-function Badge({ ok, text }:{ ok:boolean; text:string }) {
-  return <span className={`badge ${ok ? "badge-yes" : "badge-no"}`}>{ok ? "✓" : "•"} {text}</span>;
 }
 
 function MembersTable({ rows }:{ rows: RecordRow[] }) {
