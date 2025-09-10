@@ -1,3 +1,4 @@
+export const SITE_NAME = "ATAG Team Fitness Challenge 2025";
 export const WEEKS = Array.from({ length: 24 }, (_, i) => i + 1);
 
 export const POINTS = {
