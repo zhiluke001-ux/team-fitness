@@ -5,7 +5,7 @@ import { WEEKS } from "../utils/constants";
 
 type Team = "Arthur" | "Jimmy";
 type TeamBonus = { id: string; team: Team; week: number; points: number; reason: string; created_at: string };
-type EvidenceRow = { id: string; team: Team; week: number; kind: "exercise"|"habits"; image_path: string; created_at: string };
+type EvidenceRow = { id: string; team: Team; week: number; kind: "exercise" | "habits"; image_path: string; created_at: string };
 
 export default function Admin() {
   const router = useRouter();
@@ -131,10 +131,6 @@ export default function Admin() {
             <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload("exercise", f); }} />
             Upload Exercise Photo
           </label>
-          <label className="btn btn-primary">
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload("habits", f); }} />
-            Upload Healthy Habits Photo
-          </label>
         </div>
 
         {photos.length > 0 && (
@@ -155,3 +151,38 @@ export default function Admin() {
     </main>
   );
 }
+
+// --- Server-side guard: require admin role ---
+import type { GetServerSidePropsContext, GetServerSideProps } from "next";
+
+export const getServerSideProps: GetServerSideProps = async (ctx: GetServerSidePropsContext) => {
+  const { createServerSupabaseClient } = await import("@supabase/auth-helpers-nextjs");
+
+  const supabase = createServerSupabaseClient(ctx, {
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  });
+
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    return {
+      redirect: { destination: `/login?next=${encodeURIComponent("/admin")}`, permanent: false }
+    };
+  }
+
+  // Check role from profiles table
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", session.user.id)
+    .maybeSingle();
+
+  if (profile?.role !== "admin") {
+    return { redirect: { destination: "/", permanent: false } };
+  }
+
+  return { props: {} };
+};
