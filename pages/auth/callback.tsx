@@ -1,4 +1,3 @@
-// pages/auth/callback.tsx
 import { useRouter } from "next/router";
 import { useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
@@ -8,7 +7,6 @@ export default function Callback() {
 
   useEffect(() => {
     (async () => {
-      // figure out where to send the user after we finish
       const nextParam = (router.query.next as string) || "/";
       const goNext = () => router.replace(nextParam);
 
@@ -19,8 +17,7 @@ export default function Callback() {
           await supabase.auth.exchangeCodeForSession(code);
           return goNext();
         }
-
-        // 2) Old/hash flow: #access_token=...&refresh_token=...
+        // 2) Old/hash flow: #access_token=&refresh_token=
         if (typeof window !== "undefined" && window.location.hash) {
           const hash = new URLSearchParams(window.location.hash.slice(1));
           const access_token = hash.get("access_token");
@@ -30,14 +27,10 @@ export default function Callback() {
             return goNext();
           }
         }
-
-        // 3) Nothing usable found — just try to continue (maybe already signed in)
+        // 3) Already signed in?
         const { data } = await supabase.auth.getSession();
         if (data.session) return goNext();
-
-      } catch (e) {
-        // ignore and fall through to redirect
-      }
+      } catch {}
       goNext();
     })();
   }, [router]);
