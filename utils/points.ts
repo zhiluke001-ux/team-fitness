@@ -32,17 +32,12 @@ export function memberPoints(r: Pick<RecordRow, "km" | "calories" | "workouts" |
   return kmPts + calPts + woPts + mealPts;
 }
 
-/**
- * Team total = basePoints + autoBonus(All ≥2 workouts) + manual bonuses sum
- * Manual bonuses = Arthur-approved items (e.g., Healthy Habits + Full Team Exercise)
- */
 export function computeTeam(
   roster: Profile[],
   rows: RecordRow[],
   manualBonuses: TeamBonus[]
 ) {
   const byUser = new Map(rows.map(r => [r.user_id, r]));
-
   const totals = rows.reduce(
     (a, r) => {
       a.km += Number(r.km || 0);
@@ -64,10 +59,7 @@ export function computeTeam(
 
   return {
     totals,
-    bonuses: {
-      everyHas2Workouts,
-      manualSum
-    },
+    bonuses: { everyHas2Workouts, manualSum },
     totalPoints: totals.basePoints + bonusAll2 + manualSum
   };
 }
