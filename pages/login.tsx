@@ -51,11 +51,11 @@ export default function Login() {
   return (
     <>
       <Head>
-        <title>Sign In </title>
+        <title>Login — {SITE_NAME} </title>
       </Head>
       <main className="min-h-screen grid place-items-center px-4">
         <div className="card w-full max-w-md">
-          <h1 className="text-xl font-semibold mb-2">Login — {SITE_NAME}</h1>
+          <h1 className="text-xl font-semibold mb-2">Sign in</h1>
           <p className="text-sm text-gray-600 mb-4">
             Enter your email to receive a magic link.
           </p>
