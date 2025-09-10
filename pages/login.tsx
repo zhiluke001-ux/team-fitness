@@ -22,19 +22,21 @@ export default function Login() {
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
     setError(undefined);
+
     const next =
       typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("next") || "/"
         : "/";
 
+    // Prefer explicit base from env (production), fallback to current origin (previews)
+    const base =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+    const redirect = `${base}/auth/callback?next=${encodeURIComponent(next)}`;
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-            : undefined,
-      },
+      options: { emailRedirectTo: redirect }
     });
 
     if (error) setError(error.message);
