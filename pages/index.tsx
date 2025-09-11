@@ -24,6 +24,194 @@ const POINTS_SAFE = Constants?.POINTS ?? {
 const HABITS_REASON = "Healthy Habits Bonus /week";
 const EXERCISE_REASON = "Full Team Participation in an exercise";
 
+/* ----------------------- Helper UI components ----------------------- */
+
+function Field({ label, value, step = 0.1, onChange }:{
+  label: string; value: number; step?: number; onChange: (v:number)=>void;
+}) {
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <input type="number" min={0} step={step} className="input" value={value} onChange={(e)=>onChange(Number(e.target.value))} />
+    </div>
+  );
+}
+
+function Stat({ label, value }:{ label:string; value:string }) {
+  return (
+    <div className="card">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function MembersTable({ rows }:{ rows: RecordRow[] }) {
+  if (!rows?.length) return <p className="text-sm text-gray-600">No entries yet for this week.</p>;
+  const ordered = [...rows].sort((a,b)=>a.name.localeCompare(b.name));
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr className="text-left text-gray-600">
+            <th className="py-2 pr-4">Member</th>
+            <th className="py-2 pr-4">KM</th>
+            <th className="py-2 pr-4">Calories</th>
+            <th className="py-2 pr-4">Workouts</th>
+            <th className="py-2 pr-4">Meals</th>
+            <th className="py-2 pr-4">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ordered.map(r=>(
+            <tr key={`${r.user_id}-${r.week}`} className="border-t border-gray-100">
+              <td className="py-2 pr-4 font-medium">{r.name}</td>
+              <td className="py-2 pr-4">{Number(r.km||0).toFixed(1)}</td>
+              <td className="py-2 pr-4">{Math.round(Number(r.calories||0))}</td>
+              <td className="py-2 pr-4">{r.workouts}</td>
+              <td className="py-2 pr-4">{r.meals}</td>
+              <td className="py-2 pr-4">{Math.round(memberPoints(r))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ToggleRow({
+  label, value, onMinus, onPlus
+}:{ label: string; value: 0|1; onMinus: ()=>void; onPlus: ()=>void; }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="text-sm">{label}</div>
+      <div className="flex items-center gap-2">
+        <button className="btn btn-compact" onClick={onMinus} disabled={value <= 0} title="Decrease to 0">−</button>
+        <span className="w-8 text-center font-semibold">{value}</span>
+        <button className="btn btn-compact" onClick={onPlus} disabled={value >= 1} title="Increase to 1">+</button>
+      </div>
+    </div>
+  );
+}
+
+function SeasonPanelSimple({
+  title,
+  data
+}:{ title: string; data: { totals:{ km:number; calories:number; workouts:number; meals:number; basePoints:number }; bonuses:{ weeksAll2Count:number; manualSum:number }; totalPoints:number; }; }) {
+  const { totals, totalPoints } = data;
+  return (
+    <div className="card">
+      <div className="text-lg font-semibold mb-3">{title}</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <Stat label="KM Walked/Run (Total)" value={totals.km.toFixed(1)} />
+        <Stat label="Calories Burned (Total)" value={Math.round(totals.calories).toString()} />
+        <Stat label="Number of Workouts" value={totals.workouts.toString()} />
+        <Stat label="Number of Healthy Meals" value={totals.meals.toString()} />
+      </div>
+      <div className="card">
+        <div className="text-sm text-gray-700">Total team points</div>
+        <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
+      </div>
+    </div>
+  );
+}
+
+function TeamPanel({
+  title,
+  week,
+  totals,
+  totalPoints,
+  rows,
+  isAdmin,
+  habitsActive,
+  exerciseActive,
+  showAll2,
+  onSetHabits,
+  onSetExercise
+}:{
+  title: string;
+  week: number | null;
+  totals: { km:number; calories:number; workouts:number; meals:number; basePoints:number };
+  totalPoints: number;
+  rows: RecordRow[];
+  isAdmin: boolean;
+  habitsActive: boolean;
+  exerciseActive: boolean;
+  showAll2: boolean;
+  onSetHabits: (desired:0|1)=>void;
+  onSetExercise: (desired:0|1)=>void;
+}) {
+  const anyWeeklyBonus = showAll2 || habitsActive || exerciseActive;
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">{title} {week ? `(Week ${week})` : ""}</h2>
+      </div>
+
+      {!week ? (
+        <p className="text-sm text-gray-600">Pick a week.</p>
+      ) : (
+        <>
+          {isAdmin && (
+            <div className="card mb-4">
+              <div className="text-sm font-medium mb-2">Admin bonuses (0–1 each)</div>
+              <div className="grid grid-cols-1 gap-3">
+                <ToggleRow
+                  label="Healthy Habits Bonus /week (+200)"
+                  value={habitsActive ? 1 : 0}
+                  onMinus={() => onSetHabits(0)}
+                  onPlus={() => onSetHabits(1)}
+                />
+                <ToggleRow
+                  label="Full Team Participation in an exercise (+200)"
+                  value={exerciseActive ? 1 : 0}
+                  onMinus={() => onSetExercise(0)}
+                  onPlus={() => onSetExercise(1)}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <Stat label="Total KM" value={totals.km.toFixed(1)} />
+            <Stat label="Total Calories" value={Math.round(totals.calories).toString()} />
+            <Stat label="Total Workouts" value={totals.workouts.toString()} />
+            <Stat label="Total Healthy Meals" value={totals.meals.toString()} />
+          </div>
+
+          {anyWeeklyBonus && (
+            <div className="card mb-4">
+              <div className="text-sm font-medium mb-2">Weekly Bonuses</div>
+              <div className="flex flex-wrap gap-2">
+                {showAll2 && (
+                  <span className="badge badge-yes">
+                    ✓ All members completed ≥ 2 workouts +{POINTS_SAFE.bonusAllMinWorkouts}
+                  </span>
+                )}
+                {habitsActive && <span className="badge badge-yes">✓ Healthy Habits Bonus +200</span>}
+                {exerciseActive && <span className="badge badge-yes">✓ Full Team Participation in an exercise +200</span>}
+              </div>
+            </div>
+          )}
+
+          {/* ✅ FIX: close this grid div properly, then render the table */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="card">
+              <div className="text-sm text-gray-700">Total Team Points This Week</div>
+              <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
+            </div>
+          </div>
+
+          <MembersTable rows={rows} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------ Page ------------------------------ */
+
 export default function Home() {
   const router = useRouter();
 
@@ -328,7 +516,6 @@ export default function Home() {
                 week={week}
                 totals={arthurWeek.totals}
                 totalPoints={Math.round(arthurWeek.totalPoints)}
-                totalPointsAllWeeks={Math.round(arthurAll.totalPoints)}
                 rows={arthurRows}
                 isAdmin={isAdmin}
                 habitsActive={arthurHabits}
@@ -342,7 +529,6 @@ export default function Home() {
                 week={week}
                 totals={jimmyWeek.totals}
                 totalPoints={Math.round(jimmyWeek.totalPoints)}
-                totalPointsAllWeeks={Math.round(jimmyAll.totalPoints)}
                 rows={jimmyRows}
                 isAdmin={isAdmin}
                 habitsActive={jimmyHabits}
@@ -418,190 +604,8 @@ function Onboarding({ onDone }:{ onDone:(p:any)=>void }) {
   );
 }
 
-function Field({ label, value, step = 0.1, onChange }:{
-  label: string; value: number; step?: number; onChange: (v:number)=>void;
-}) {
-  return (
-    <div>
-      <label className="label">{label}</label>
-      <input type="number" min={0} step={step} className="input" value={value} onChange={(e)=>onChange(Number(e.target.value))} />
-    </div>
-  );
-}
+/* ----------------------- Server-side auth guard ----------------------- */
 
-function TeamPanel({
-  title,
-  week,
-  totals,
-  totalPoints,
-  totalPointsAllWeeks,
-  rows,
-  isAdmin,
-  habitsActive,
-  exerciseActive,
-  showAll2,
-  onSetHabits,
-  onSetExercise
-}:{
-  title: string;
-  week: number | null;
-  totals: { km:number; calories:number; workouts:number; meals:number; basePoints:number };
-  totalPoints: number;
-  totalPointsAllWeeks: number;
-  rows: RecordRow[];
-  isAdmin: boolean;
-  habitsActive: boolean;
-  exerciseActive: boolean;
-  showAll2: boolean;
-  onSetHabits: (desired:0|1)=>void;
-  onSetExercise: (desired:0|1)=>void;
-}) {
-  const anyWeeklyBonus = showAll2 || habitsActive || exerciseActive;
-
-  return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">{title} {week ? `(Week ${week})` : ""}</h2>
-      </div>
-
-      {!week ? (
-        <p className="text-sm text-gray-600">Pick a week.</p>
-      ) : (
-        <>
-          {isAdmin && (
-            <div className="card mb-4">
-              <div className="text-sm font-medium mb-2">Admin bonuses (0–1 each)</div>
-              <div className="grid grid-cols-1 gap-3">
-                <ToggleRow
-                  label="Healthy Habits Bonus /week (+200)"
-                  value={habitsActive ? 1 : 0}
-                  onMinus={() => onSetHabits(0)}
-                  onPlus={() => onSetHabits(1)}
-                />
-                <ToggleRow
-                  label="Full Team Participation in an exercise (+200)"
-                  value={exerciseActive ? 1 : 0}
-                  onMinus={() => onSetExercise(0)}
-                  onPlus={() => onSetExercise(1)}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <Stat label="Total KM" value={totals.km.toFixed(1)} />
-            <Stat label="Total Calories" value={Math.round(totals.calories).toString()} />
-            <Stat label="Total Workouts" value={totals.workouts.toString()} />
-            <Stat label="Total Healthy Meals" value={totals.meals.toString()} />
-          </div>
-
-          {anyWeeklyBonus && (
-            <div className="card mb-4">
-              <div className="text-sm font-medium mb-2">Weekly Bonuses</div>
-              <div className="flex flex-wrap gap-2">
-                {showAll2 && (
-                  <span className="badge badge-yes">
-                    ✓ All members completed ≥ 2 workouts +{POINTS_SAFE.bonusAllMinWorkouts}
-                  </span>
-                )}
-                {habitsActive && <span className="badge badge-yes">✓ Healthy Habits Bonus +200</span>}
-                {exerciseActive && <span className="badge badge-yes">✓ Full Team Participation in an exercise +200</span>}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points This Week</div>
-              <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
-            </div>
-          <MembersTable rows={rows} />
-        </>
-      )}
-    </div>
-  );
-}
-
-function ToggleRow({
-  label, value, onMinus, onPlus
-}:{ label: string; value: 0|1; onMinus: ()=>void; onPlus: ()=>void; }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div className="text-sm">{label}</div>
-      <div className="flex items-center gap-2">
-        <button className="btn btn-compact" onClick={onMinus} disabled={value <= 0} title="Decrease to 0">−</button>
-        <span className="w-8 text-center font-semibold">{value}</span>
-        <button className="btn btn-compact" onClick={onPlus} disabled={value >= 1} title="Increase to 1">+</button>
-      </div>
-    </div>
-  );
-}
-
-function SeasonPanelSimple({
-  title,
-  data
-}:{ title: string; data: { totals:{ km:number; calories:number; workouts:number; meals:number; basePoints:number }; bonuses:{ weeksAll2Count:number; manualSum:number }; totalPoints:number; }; }) {
-  const { totals, totalPoints } = data;
-  return (
-    <div className="card">
-      <div className="text-lg font-semibold mb-3">{title}</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <Stat label="KM Walked/Run (Total)" value={totals.km.toFixed(1)} />
-        <Stat label="Calories Burned (Total)" value={Math.round(totals.calories).toString()} />
-        <Stat label="Number of Workouts" value={totals.workouts.toString()} />
-        <Stat label="Number of Healthy Meals" value={totals.meals.toString()} />
-      </div>
-      <div className="card">
-        <div className="text-sm text-gray-700">Total team points</div>
-        <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }:{ label:string; value:string }) {
-  return (
-    <div className="card">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-function MembersTable({ rows }:{ rows: RecordRow[] }) {
-  if (!rows?.length) return <p className="text-sm text-gray-600">No entries yet for this week.</p>;
-  const ordered = [...rows].sort((a,b)=>a.name.localeCompare(b.name));
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="text-left text-gray-600">
-            <th className="py-2 pr-4">Member</th>
-            <th className="py-2 pr-4">KM</th>
-            <th className="py-2 pr-4">Calories</th>
-            <th className="py-2 pr-4">Workouts</th>
-            <th className="py-2 pr-4">Meals</th>
-            <th className="py-2 pr-4">Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordered.map(r=>(
-            <tr key={`${r.user_id}-${r.week}`} className="border-t border-gray-100">
-              <td className="py-2 pr-4 font-medium">{r.name}</td>
-              <td className="py-2 pr-4">{Number(r.km||0).toFixed(1)}</td>
-              <td className="py-2 pr-4">{Math.round(Number(r.calories||0))}</td>
-              <td className="py-2 pr-4">{r.workouts}</td>
-              <td className="py-2 pr-4">{r.meals}</td>
-              <td className="py-2 pr-4">{Math.round(memberPoints(r))}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// --- Server-side guard ---
 import type { GetServerSidePropsContext, GetServerSideProps } from "next";
 import { createServerSupabaseClient } from "../lib/supabaseServer";
 
