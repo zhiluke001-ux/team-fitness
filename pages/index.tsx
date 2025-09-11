@@ -195,7 +195,6 @@ function TeamPanel({
             </div>
           )}
 
-          {/* ✅ FIX: close this grid div properly, then render the table */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
               <div className="text-sm text-gray-700">Total Team Points This Week</div>
@@ -243,6 +242,35 @@ export default function Home() {
   const [jimmyAllRows, setJimmyAllRows] = useState<RecordRow[]>([]);
   const [arthurAllBonuses, setArthurAllBonuses] = useState<TeamBonus[]>([]);
   const [jimmyAllBonuses, setJimmyAllBonuses] = useState<TeamBonus[]>([]);
+
+  // --- NEW: read week from URL on first load / navigation
+  useEffect(() => {
+    if (!router.isReady) return;
+    const q = router.query.week;
+    const w = Number(Array.isArray(q) ? q[0] : q);
+    if (!Number.isNaN(w) && w >= 1 && w <= 24) {
+      setWeek(w);
+    }
+  }, [router.isReady, router.query.week]);
+
+  // --- NEW: reflect selected week back into the URL for sharing
+  useEffect(() => {
+    if (!router.isReady) return;
+    const q = router.query.week;
+    const current = q ? Number(Array.isArray(q) ? q[0] : q) : null;
+
+    if (week && current !== week) {
+      router.replace(
+        { pathname: router.pathname, query: { ...router.query, week } },
+        undefined,
+        { shallow: true }
+      );
+    }
+    if (!week && q) {
+      const { week: _omit, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
+  }, [week, router]);
 
   // Session init
   useEffect(() => {
@@ -469,6 +497,15 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Season Totals (All Weeks) */}
+            <div className="card mb-6">
+              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanelSimple title="Team Arthur" data={arthurAll} />
+                <SeasonPanelSimple title="Team Jimmy" data={jimmyAll} />
+              </div>
+            </div>
+
             {/* My editor */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -529,16 +566,6 @@ export default function Home() {
                 onSetExercise={(desired) => setToggle("Jimmy", EXERCISE_REASON, desired)}
               />
             </div>
-            
-            {/* Season Totals (All Weeks) */}
-            <div className="card mb-6">
-              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanelSimple title="Team Arthur" data={arthurAll} />
-                <SeasonPanelSimple title="Team Jimmy" data={jimmyAll} />
-              </div>
-            </div>
-          
           </>
         )}
       </main>
