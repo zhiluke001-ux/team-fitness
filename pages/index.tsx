@@ -1,4 +1,3 @@
-
 import Head from "next/head";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
@@ -10,27 +9,30 @@ import {
   TeamBonus,
   memberPoints,
   computeTeam,
-  computeTeamAcrossWeeks
+  computeTeamAcrossWeeks,
+  TeamName
 } from "../utils/points";
 import { SITE_NAME } from "../utils/constants";
 
+// Fallbacks
 const WEEKS_SAFE = Constants?.WEEKS ?? Array.from({ length: 24 }, (_, i) => i + 1);
 const POINTS_SAFE = Constants?.POINTS ?? {
   perKm: 10, per1000Calories: 100, perWorkout: 20, perHealthyMeal: 20, bonusAllMinWorkouts: 200
 };
 
-type EvidenceRow = { team: "Arthur" | "Jimmy"; week: number; kind: "exercise" | "habits"; image_path: string };
+// Toggle reasons
+const HABITS_REASON = "Healthy Habits Bonus /week";
+const EXERCISE_REASON = "Full Team Participation in an exercise";
 
 export default function Home() {
   const router = useRouter();
-  const debug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
 
-  // Session & profile
+  // Auth/session
   const [userId, setUserId] = useState<string>();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
-  // UI state
+  // UI
   const [week, setWeek] = useState<number | null>(null);
   const [error, setError] = useState<string>();
 
@@ -42,27 +44,19 @@ export default function Home() {
   const [arthurRoster, setArthurRoster] = useState<Profile[]>([]);
   const [jimmyRoster, setJimmyRoster] = useState<Profile[]>([]);
 
-  // Records per SELECTED week
+  // Weekly data
   const [arthurRows, setArthurRows] = useState<RecordRow[]>([]);
   const [jimmyRows, setJimmyRows] = useState<RecordRow[]>([]);
-
-  // Evidence gallery (per week)
-  const [arthurExercise, setArthurExercise] = useState<string[]>([]);
-  const [arthurHabits, setArthurHabits] = useState<string[]>([]);
-  const [jimmyExercise, setJimmyExercise] = useState<string[]>([]);
-  const [jimmyHabits, setJimmyHabits] = useState<string[]>([]);
-
-  // Admin manual bonuses (per SELECTED week)
   const [arthurBonuses, setArthurBonuses] = useState<TeamBonus[]>([]);
   const [jimmyBonuses, setJimmyBonuses] = useState<TeamBonus[]>([]);
 
-  // All-weeks data (season totals)
+  // All-weeks data
   const [arthurAllRows, setArthurAllRows] = useState<RecordRow[]>([]);
   const [jimmyAllRows, setJimmyAllRows] = useState<RecordRow[]>([]);
   const [arthurAllBonuses, setArthurAllBonuses] = useState<TeamBonus[]>([]);
   const [jimmyAllBonuses, setJimmyAllBonuses] = useState<TeamBonus[]>([]);
 
-  // Bootstrap session & profile
+  // Session init
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -87,18 +81,7 @@ export default function Home() {
     return () => sub.data.subscription.unsubscribe();
   }, [router]);
 
-  // Force refresh profile on first load (safety net)
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user.id;
-      if (!uid) return;
-      const { data: prof } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
-      if (prof) setProfile(prof as any);
-    })();
-  }, []);
-
-  // Load full roster
+  // Load roster
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("profiles").select("*");
@@ -114,10 +97,8 @@ export default function Home() {
     (async () => {
       setError(undefined);
       const { data, error } = await supabase
-        .from("records")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("week", week)
+        .from("records").select("*")
+        .eq("user_id", userId).eq("week", week)
         .maybeSingle();
       if (error) { setError(error.message); return; }
       if (!data) {
@@ -142,22 +123,14 @@ export default function Home() {
     setArthurRows(list.filter(r => r.team === "Arthur"));
     setJimmyRows(list.filter(r => r.team === "Jimmy"));
 
-    const { data: ev } = await supabase.from("team_evidence").select("*").eq("week", wk).eq("approved", true);
-    const evList = (ev || []) as EvidenceRow[];
-    setArthurExercise(evList.filter(e => e.team === "Arthur" && e.kind === "exercise").map(e => e.image_path));
-    setArthurHabits(evList.filter(e => e.team === "Arthur" && e.kind === "habits").map(e => e.image_path));
-    setJimmyExercise(evList.filter(e => e.team === "Jimmy" && e.kind === "exercise").map(e => e.image_path));
-    setJimmyHabits(evList.filter(e => e.team === "Jimmy" && e.kind === "habits").map(e => e.image_path));
-
     const { data: bons } = await supabase.from("team_bonuses").select("*").eq("week", wk);
     const bonsList = (bons || []) as TeamBonus[];
     setArthurBonuses(bonsList.filter(b => b.team === "Arthur"));
     setJimmyBonuses(bonsList.filter(b => b.team === "Jimmy"));
   };
-
   useEffect(() => { fetchTeams(); }, [week]);
 
-  // Fetch ALL-WEEKS data once and keep it fresh
+  // Fetch ALL-WEEKS data
   async function refreshAllTotals() {
     const { data: recs } = await supabase.from("records").select("*");
     const list = (recs || []) as RecordRow[];
@@ -169,29 +142,22 @@ export default function Home() {
     setArthurAllBonuses(bList.filter(b => b.team === "Arthur"));
     setJimmyAllBonuses(bList.filter(b => b.team === "Jimmy"));
   }
-
   useEffect(() => { refreshAllTotals(); }, []);
 
-  // Realtime for selected week
+  // Realtime listeners
   useEffect(() => {
     if (!week) return;
     const recCh = supabase
       .channel(`records-w${week}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "records", filter: `week=eq.${week}` }, () => fetchTeams(week))
       .subscribe();
-    const evCh = supabase
-      .channel(`evidence-w${week}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "team_evidence", filter: `week=eq.${week}` }, () => fetchTeams(week))
-      .subscribe();
     const bonCh = supabase
       .channel(`bonuses-w${week}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "team_bonuses", filter: `week=eq.${week}` }, () => fetchTeams(week))
       .subscribe();
-
-    return () => { supabase.removeChannel(recCh); supabase.removeChannel(evCh); supabase.removeChannel(bonCh); };
+    return () => { supabase.removeChannel(recCh); supabase.removeChannel(bonCh); };
   }, [week]);
 
-  // Realtime for ALL-WEEKS totals (no filter)
   useEffect(() => {
     const ch = supabase
       .channel("all-weeks")
@@ -201,49 +167,25 @@ export default function Home() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // My points (selected week)
+  // Points / aggregates
   const myPoints = useMemo(() => (myRecord ? Math.round(memberPoints(myRecord)) : 0), [myRecord]);
 
-  // Team (selected week)
-  const arthur = useMemo(
-    () => computeTeam(arthurRoster, arthurRows, arthurBonuses),
-    [arthurRows, arthurRoster, arthurBonuses]
-  );
-  const jimmy = useMemo(
-    () => computeTeam(jimmyRoster, jimmyRows, jimmyBonuses),
-    [jimmyRows, jimmyRoster, jimmyBonuses]
-  );
+  const arthurWeek = useMemo(() => computeTeam(arthurRoster, arthurRows, arthurBonuses), [arthurRows, arthurRoster, arthurBonuses]);
+  const jimmyWeek  = useMemo(() => computeTeam(jimmyRoster, jimmyRows, jimmyBonuses), [jimmyRows, jimmyRoster, jimmyBonuses]);
 
-  // Season totals (all weeks)
-  const arthurAll = useMemo(
-    () => computeTeamAcrossWeeks(arthurRoster, arthurAllRows, arthurAllBonuses),
-    [arthurRoster, arthurAllRows, arthurAllBonuses]
-  );
-  const jimmyAll = useMemo(
-    () => computeTeamAcrossWeeks(jimmyRoster, jimmyAllRows, jimmyAllBonuses),
-    [jimmyRoster, jimmyAllRows, jimmyAllBonuses]
-  );
+  const arthurAll  = useMemo(() => computeTeamAcrossWeeks(arthurRoster, arthurAllRows, arthurAllBonuses), [arthurRoster, arthurAllRows, arthurAllBonuses]);
+  const jimmyAll   = useMemo(() => computeTeamAcrossWeeks(jimmyRoster, jimmyAllRows, jimmyAllBonuses), [jimmyRoster, jimmyAllRows, jimmyAllBonuses]);
 
   async function save() {
     if (!myRecord || !profile) return;
     setSaving(true); setError(undefined);
     const payload = {
-      user_id: myRecord.user_id,
-      name: profile.name,
-      team: profile.team,
-      week: myRecord.week,
-      km: Number(myRecord.km) || 0,
-      calories: Number(myRecord.calories) || 0,
-      workouts: Number(myRecord.workouts) || 0,
-      meals: Number(myRecord.meals) || 0,
+      user_id: myRecord.user_id, name: profile.name, team: profile.team, week: myRecord.week,
+      km: Number(myRecord.km) || 0, calories: Number(myRecord.calories) || 0,
+      workouts: Number(myRecord.workouts) || 0, meals: Number(myRecord.meals) || 0
     };
-    const { data, error } = await supabase
-      .from("records")
-      .upsert([payload], { onConflict: "user_id,week" })
-      .select()
-      .maybeSingle();
-    if (error) setError(error.message);
-    else setMyRecord(data as RecordRow);
+    const { data, error } = await supabase.from("records").upsert([payload], { onConflict: "user_id,week" }).select().maybeSingle();
+    if (error) setError(error.message); else setMyRecord(data as RecordRow);
     setSaving(false);
   }
 
@@ -253,9 +195,25 @@ export default function Home() {
     router.replace(`/login?next=${encodeURIComponent(next)}`);
   }
 
-  function publicUrl(path?: string) {
-    if (!path) return "";
-    return supabase.storage.from("team-evidence").getPublicUrl(path).data.publicUrl;
+  // Admin toggles 0/1
+  const isAdmin = profile?.role === "admin";
+  const arthurHabits   = arthurBonuses.some(b => b.reason.startsWith(HABITS_REASON));
+  const arthurExercise = arthurBonuses.some(b => b.reason.startsWith(EXERCISE_REASON));
+  const jimmyHabits    = jimmyBonuses.some(b => b.reason.startsWith(HABITS_REASON));
+  const jimmyExercise  = jimmyBonuses.some(b => b.reason.startsWith(EXERCISE_REASON));
+
+  async function setToggle(team: TeamName, reason: string, desired: 0 | 1) {
+    if (!week || !isAdmin) return;
+    const list = team === "Arthur" ? arthurBonuses : jimmyBonuses;
+    const has = list.some(b => b.reason.startsWith(reason));
+    if (desired === 1 && !has) {
+      const { error } = await supabase.from("team_bonuses").insert({ team, week, points: 200, reason, created_by: userId });
+      if (error) setError(error.message);
+    } else if (desired === 0 && has) {
+      const { error } = await supabase.from("team_bonuses").delete().eq("team", team).eq("week", week).like("reason", `${reason}%`);
+      if (error) setError(error.message);
+    }
+    await fetchTeams(week);
   }
 
   if (loadingSession) {
@@ -277,12 +235,6 @@ export default function Home() {
       </Head>
 
       <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
-        {debug && (
-          <pre className="card overflow-auto mb-4 text-xs">
-            {JSON.stringify({ loadingSession, userId, profile, week }, null, 2)}
-          </pre>
-        )}
-
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl md:text-3xl font-bold">{SITE_NAME}</h1>
           {userId && (
@@ -305,6 +257,7 @@ export default function Home() {
                 <div className="text-xs text-gray-500">You are</div>
                 <div className="text-lg font-semibold">{profile.name}</div>
                 <div className="badge mt-2">{profile.team === "Arthur" ? "Team Arthur" : "Team Jimmy"}</div>
+                {isAdmin && <div className="badge badge-yes ml-2">Admin</div>}
               </div>
               <div className="card">
                 <label className="label">Week (1–24)</label>
@@ -321,13 +274,21 @@ export default function Home() {
                   <div>Number of workout 20 pts</div>
                   <div>No of healthy meal 20 pts</div>
                   <div>All members complete ≥ 2 workouts/week 200 pts</div>
-                  <div>Healthy Habits Bonus /week 200 pts</div>
-                  <div>Full Team Participation in an exercise /week 200 pts</div>
                   <div className="pt-1 border-t border-gray-100" />
+                  <div>Healthy Habits Bonus /week 200 pts</div>
+                  <div>Full Team Participation in an exercise 200 pts</div>
                 </div>
               </div>
             </div>
 
+            {/* Season Totals (All Weeks) */}
+            <div className="card mb-6">
+              <h2 className="text-lg font-semibold mb-3">Season Totals (All Weeks)</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanelSimple title="Team Arthur — All Weeks" data={arthurAll} />
+                <SeasonPanelSimple title="Team Jimmy — All Weeks" data={jimmyAll} />
+              </div>
+            </div>
 
             {/* My editor */}
             <div className="card mb-6">
@@ -360,41 +321,36 @@ export default function Home() {
               {error && <p className="mt-3 text-sm text-red-600">Error: {error}</p>}
             </div>
 
-            {/* Team panels (selected week) */}
+            {/* Team panels (selected week) with admin toggles and weekly bonuses */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <TeamPanel
                 title="Team Arthur"
                 week={week}
-                totals={arthur.totals}
-                totalPoints={Math.round(arthur.totalPoints)}
+                totals={arthurWeek.totals}
+                totalPoints={Math.round(arthurWeek.totalPoints)}
                 totalPointsAllWeeks={Math.round(arthurAll.totalPoints)}
                 rows={arthurRows}
-                exercisePhotos={arthurExercise}
-                habitsPhotos={arthurHabits}
-                publicUrl={publicUrl}
+                isAdmin={isAdmin}
+                habitsActive={arthurHabits}
+                exerciseActive={arthurExercise}
+                showAll2={arthurWeek.bonuses.everyHas2Workouts}
+                onSetHabits={(desired) => setToggle("Arthur", HABITS_REASON, desired)}
+                onSetExercise={(desired) => setToggle("Arthur", EXERCISE_REASON, desired)}
               />
               <TeamPanel
                 title="Team Jimmy"
                 week={week}
-                totals={jimmy.totals}
-                totalPoints={Math.round(jimmy.totalPoints)}
+                totals={jimmyWeek.totals}
+                totalPoints={Math.round(jimmyWeek.totalPoints)}
                 totalPointsAllWeeks={Math.round(jimmyAll.totalPoints)}
                 rows={jimmyRows}
-                exercisePhotos={jimmyExercise}
-                habitsPhotos={jimmyHabits}
-                publicUrl={publicUrl}
+                isAdmin={isAdmin}
+                habitsActive={jimmyHabits}
+                exerciseActive={jimmyExercise}
+                showAll2={jimmyWeek.bonuses.everyHas2Workouts}
+                onSetHabits={(desired) => setToggle("Jimmy", HABITS_REASON, desired)}
+                onSetExercise={(desired) => setToggle("Jimmy", EXERCISE_REASON, desired)}
               />
-            </div>
-           
-            {/* Season Totals (All Weeks) */}
-            <div className="card mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold">Total Team Points</h2>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanel title="Team Arthur — All Weeks" data={arthurAll} />
-                <SeasonPanel title="Team Jimmy — All Weeks" data={jimmyAll} />
-              </div>
             </div>
           </>
         )}
@@ -430,22 +386,15 @@ function Onboarding({ onDone }:{ onDone:(p:any)=>void }) {
           return;
         }
         const { data: existing, error: selErr } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", uid)
-          .single();
+          .from("profiles").select("*").eq("id", uid).single();
         if (selErr || !existing) {
-          setError(insErr.message || "Could not save profile.");
-          return;
+          setError(insErr.message || "Could not save profile."); return;
         }
-        onDone(existing);
-        return;
+        onDone(existing); return;
       }
 
       onDone(data);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
@@ -487,51 +436,57 @@ function TeamPanel({
   totalPoints,
   totalPointsAllWeeks,
   rows,
-  exercisePhotos,
-  habitsPhotos,
-  publicUrl
+  isAdmin,
+  habitsActive,
+  exerciseActive,
+  showAll2,
+  onSetHabits,
+  onSetExercise
 }:{
   title: string;
   week: number | null;
   totals: { km:number; calories:number; workouts:number; meals:number; basePoints:number };
-  totalPoints: number;                 // weekly
-  totalPointsAllWeeks: number;         // season/all weeks
+  totalPoints: number;
+  totalPointsAllWeeks: number;
   rows: RecordRow[];
-  exercisePhotos: string[];
-  habitsPhotos: string[];
-  publicUrl: (p?:string)=>string;
+  isAdmin: boolean;
+  habitsActive: boolean;
+  exerciseActive: boolean;
+  showAll2: boolean;
+  onSetHabits: (desired:0|1)=>void;
+  onSetExercise: (desired:0|1)=>void;
 }) {
+  const anyWeeklyBonus = showAll2 || habitsActive || exerciseActive;
+
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold">{title} {week ? `(Week ${week})` : ""}</h2>
       </div>
-      {!week ? <p className="text-sm text-gray-600">Pick a week.</p> : (
+
+      {!week ? (
+        <p className="text-sm text-gray-600">Pick a week.</p>
+      ) : (
         <>
-          {(exercisePhotos.length || habitsPhotos.length) ? (
-            <div className="mb-4">
-              {exercisePhotos.length > 0 && (
-                <>
-                  <div className="text-sm font-medium mb-2">Exercise participation</div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-                    {exercisePhotos.map((p, i) => (
-                      <img key={i} className="rounded-lg w-full object-cover max-h-48" src={publicUrl(p)} alt={`${title} exercise ${i+1}`} />
-                    ))}
-                  </div>
-                </>
-              )}
-              {habitsPhotos.length > 0 && (
-                <>
-                  <div className="text-sm font-medium mb-2">Healthy habits</div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {habitsPhotos.map((p, i) => (
-                      <img key={i} className="rounded-lg w-full object-cover max-h-48" src={publicUrl(p)} alt={`${title} habits ${i+1}`} />
-                    ))}
-                  </div>
-                </>
-              )}
+          {isAdmin && (
+            <div className="card mb-4">
+              <div className="text-sm font-medium mb-2">Admin bonuses (0–1 each)</div>
+              <div className="grid grid-cols-1 gap-3">
+                <ToggleRow
+                  label="Healthy Habits Bonus /week (+200)"
+                  value={habitsActive ? 1 : 0}
+                  onMinus={() => onSetHabits(0)}
+                  onPlus={() => onSetHabits(1)}
+                />
+                <ToggleRow
+                  label="Full Team Participation in an exercise (+200)"
+                  value={exerciseActive ? 1 : 0}
+                  onMinus={() => onSetExercise(0)}
+                  onPlus={() => onSetExercise(1)}
+                />
+              </div>
             </div>
-          ) : null}
+          )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <Stat label="Total KM" value={totals.km.toFixed(1)} />
@@ -539,6 +494,21 @@ function TeamPanel({
             <Stat label="Total Workouts" value={totals.workouts.toString()} />
             <Stat label="Total Healthy Meals" value={totals.meals.toString()} />
           </div>
+
+          {anyWeeklyBonus && (
+            <div className="card mb-4">
+              <div className="text-sm font-medium mb-2">Weekly Bonuses</div>
+              <div className="flex flex-wrap gap-2">
+                {showAll2 && (
+                  <span className="badge badge-yes">
+                    ✓ All members completed ≥ 2 workouts +{POINTS_SAFE.bonusAllMinWorkouts}
+                  </span>
+                )}
+                {habitsActive && <span className="badge badge-yes">✓ Healthy Habits Bonus +200</span>}
+                {exerciseActive && <span className="badge badge-yes">✓ Full Team Participation in an exercise +200</span>}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
@@ -558,15 +528,26 @@ function TeamPanel({
   );
 }
 
-function SeasonPanel({ title, data }:{
-  title: string;
-  data: {
-    totals: { km:number; calories:number; workouts:number; meals:number; basePoints:number };
-    bonuses: { weeksAll2Count:number; manualSum:number };
-    totalPoints: number;
-  };
-}) {
-  const { totals, bonuses, totalPoints } = data;
+function ToggleRow({
+  label, value, onMinus, onPlus
+}:{ label: string; value: 0|1; onMinus: ()=>void; onPlus: ()=>void; }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="text-sm">{label}</div>
+      <div className="flex items-center gap-2">
+        <button className="btn btn-compact" onClick={onMinus} disabled={value <= 0} title="Decrease to 0">−</button>
+        <span className="w-8 text-center font-semibold">{value}</span>
+        <button className="btn btn-compact" onClick={onPlus} disabled={value >= 1} title="Increase to 1">+</button>
+      </div>
+    </div>
+  );
+}
+
+function SeasonPanelSimple({
+  title,
+  data
+}:{ title: string; data: { totals:{ km:number; calories:number; workouts:number; meals:number; basePoints:number }; bonuses:{ weeksAll2Count:number; manualSum:number }; totalPoints:number; }; }) {
+  const { totals, totalPoints } = data;
   return (
     <div className="card">
       <div className="text-lg font-semibold mb-3">{title}</div>
@@ -576,20 +557,9 @@ function SeasonPanel({ title, data }:{
         <Stat label="Workouts (all weeks)" value={totals.workouts.toString()} />
         <Stat label="Meals (all weeks)" value={totals.meals.toString()} />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div className="card">
-          <div className="text-sm text-gray-700 mb-2">
-            Base points total: <strong>{Math.round(totals.basePoints)}</strong>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="badge badge-yes">✓ Weeks all ≥2 workouts: {bonuses.weeksAll2Count} (× +{POINTS_SAFE.bonusAllMinWorkouts})</span>
-            <span className="badge badge-yes">✓ Admin bonuses total: +{bonuses.manualSum}</span>
-          </div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-700">Total team points (ALL weeks):</div>
-          <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
-        </div>
+      <div className="card">
+        <div className="text-sm text-gray-700">Total team points (ALL weeks):</div>
+        <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
       </div>
     </div>
   );
@@ -637,7 +607,7 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
   );
 }
 
-// --- Server-side guard: redirect anonymous users before rendering ---
+// --- Server-side guard ---
 import type { GetServerSidePropsContext, GetServerSideProps } from "next";
 import { createServerSupabaseClient } from "../lib/supabaseServer";
 
@@ -647,12 +617,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx: GetServerSideP
 
   if (!session) {
     const next = ctx.resolvedUrl || "/";
-    return {
-      redirect: {
-        destination: `/login?next=${encodeURIComponent(next)}`,
-        permanent: false
-      }
-    };
+    return { redirect: { destination: `/login?next=${encodeURIComponent(next)}`, permanent: false } };
   }
   return { props: {} };
 };
