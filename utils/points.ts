@@ -1,4 +1,3 @@
-// utils/points.ts
 import { POINTS, WEEKS } from "./constants";
 
 export type TeamName = "Arthur" | "Jimmy";
@@ -62,7 +61,6 @@ export function computeTeam(
     basePoints: sumBasePoints(rows)
   };
 
-  // All members >= 2 workouts for this week?
   const rosterIds = new Set(roster.map((p) => p.id));
   const byUser = new Map<string, RecordRow>();
   rows.forEach((r) => byUser.set(r.user_id, r));
@@ -101,7 +99,7 @@ export function computeTeamAcrossWeeks(
     basePoints: sumBasePoints(rowsAllWeeks)
   };
 
-  // Group by week
+  // Group by week to count "all >=2 workouts" weeks
   const rowsByWeek = new Map<number, RecordRow[]>();
   for (const r of rowsAllWeeks) {
     const arr = rowsByWeek.get(r.week) || [];
@@ -109,7 +107,6 @@ export function computeTeamAcrossWeeks(
     rowsByWeek.set(r.week, arr);
   }
 
-  // Count weeks where everyone hit >= 2 workouts
   const rosterIds = roster.map((p) => p.id);
   let weeksAll2Count = 0;
 
