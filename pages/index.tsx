@@ -58,7 +58,7 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
             <th className="py-2 pr-4">KM</th>
             <th className="py-2 pr-4">Calories</th>
             <th className="py-2 pr-4">Workouts</th>
-            <th className="py-2 pr-4">Meals</th>
+            <th className="py-2 pr-4">Healthy Meals</th>
             <th className="py-2 pr-4">Points</th>
           </tr>
         </thead>
