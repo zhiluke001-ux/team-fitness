@@ -30,18 +30,19 @@ export default function Login() {
       const site =
         process.env.NEXT_PUBLIC_SITE_URL ||
         (typeof window !== "undefined" ? window.location.origin : "");
-      const redirectTo = `${site}/auth/callback`;
+
+      // Preserve the intended destination (including ?week=...)
+      const nextParam =
+        (router.query.next as string) ||
+        (typeof window !== "undefined" ? window.location.pathname + window.location.search : "/");
+
+      const redirectTo = `${site}/auth/callback?next=${encodeURIComponent(nextParam)}`;
+
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: {
-          emailRedirectTo: redirectTo,
-          shouldCreateUser: true
-        }
+        options: { emailRedirectTo: redirectTo, shouldCreateUser: true }
       });
-      if (error) {
-        setErr(error.message);
-        return;
-      }
+      if (error) { setErr(error.message); return; }
       setMsg("Magic link sent! Check your email and open it on this device.");
     } finally {
       setSending(false);
@@ -50,15 +51,11 @@ export default function Login() {
 
   return (
     <>
-      <Head>
-        <title>Login — {SITE_NAME} </title>
-      </Head>
+      <Head><title>Login — {SITE_NAME}</title></Head>
       <main className="min-h-screen grid place-items-center px-4">
         <div className="card w-full max-w-md">
-          <h1 className="text-xl font-semibold mb-2">Sign in</h1>
-          <p className="text-sm text-gray-600 mb-4">
-            Enter your email to receive a magic link.
-          </p>
+          <h1 className="text-xl font-semibold mb-2">Login — {SITE_NAME}</h1>
+          <p className="text-sm text-gray-600 mb-4">Enter your email to receive a magic link.</p>
           <form onSubmit={sendLink} className="grid gap-3">
             <input
               type="email"
