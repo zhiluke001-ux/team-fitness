@@ -14,17 +14,19 @@ import {
 } from "../utils/points";
 import { SITE_NAME } from "../utils/constants";
 
-// Fallbacks
+/* ------------------------- Config & helpers ------------------------- */
+
 const WEEKS_SAFE = Constants?.WEEKS ?? Array.from({ length: 24 }, (_, i) => i + 1);
 const POINTS_SAFE = Constants?.POINTS ?? {
   perKm: 10, per1000Calories: 100, perWorkout: 20, perHealthyMeal: 20, bonusAllMinWorkouts: 200
 };
 
-// Toggle reasons
 const HABITS_REASON = "Healthy Habits Bonus /week";
 const EXERCISE_REASON = "Full Team Participation in an exercise";
 
-/* ----------------------- Helper UI components ----------------------- */
+const fmt2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : "0.00");
+
+/* ----------------------- Small presentational UI ----------------------- */
 
 function Field({ label, value, step = 0.1, onChange }:{
   label: string; value: number; step?: number; onChange: (v:number)=>void;
@@ -32,7 +34,14 @@ function Field({ label, value, step = 0.1, onChange }:{
   return (
     <div>
       <label className="label">{label}</label>
-      <input type="number" min={0} step={step} className="input" value={value} onChange={(e)=>onChange(Number(e.target.value))} />
+      <input
+        type="number"
+        min={0}
+        step={step}
+        className="input"
+        value={Number.isFinite(value) ? value : 0}
+        onChange={(e)=>onChange(Number(e.target.value))}
+      />
     </div>
   );
 }
@@ -58,19 +67,19 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
             <th className="py-2 pr-4">KM</th>
             <th className="py-2 pr-4">Calories</th>
             <th className="py-2 pr-4">Workouts</th>
-            <th className="py-2 pr-4">Healthy Meals</th>
-            <th className="py-2 pr-4">Points</th>
+            <th className="py-2 pr-4">Meals</th>
+            <th className="py-2 pr-4">Pts</th>
           </tr>
         </thead>
         <tbody>
           {ordered.map(r=>(
             <tr key={`${r.user_id}-${r.week}`} className="border-t border-gray-100">
               <td className="py-2 pr-4 font-medium">{r.name}</td>
-              <td className="py-2 pr-4">{Number(r.km||0).toFixed(1)}</td>
-              <td className="py-2 pr-4">{Math.round(Number(r.calories||0))}</td>
+              <td className="py-2 pr-4">{fmt2(Number(r.km||0))}</td>
+              <td className="py-2 pr-4">{fmt2(Number(r.calories||0))}</td>
               <td className="py-2 pr-4">{r.workouts}</td>
               <td className="py-2 pr-4">{r.meals}</td>
-              <td className="py-2 pr-4">{Math.round(memberPoints(r))}</td>
+              <td className="py-2 pr-4">{fmt2(memberPoints(r))}</td>
             </tr>
           ))}
         </tbody>
@@ -103,14 +112,14 @@ function SeasonPanelSimple({
     <div className="card">
       <div className="text-lg font-semibold mb-3">{title}</div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <Stat label="KM Walked/Run (Total)" value={totals.km.toFixed(1)} />
-        <Stat label="Calories Burned (Total)" value={Math.round(totals.calories).toString()} />
-        <Stat label="Number of Workouts" value={totals.workouts.toString()} />
-        <Stat label="Number of Healthy Meals" value={totals.meals.toString()} />
+        <Stat label="KM Walked/Run (Total)" value={fmt2(totals.km)} />
+        <Stat label="Calories Burned (Total)" value={fmt2(totals.calories)} />
+        <Stat label="Number of Workouts" value={String(totals.workouts)} />
+        <Stat label="Number of Healthy Meals" value={String(totals.meals)} />
       </div>
       <div className="card">
         <div className="text-sm text-gray-700">Total team points</div>
-        <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
+        <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
       </div>
     </div>
   );
@@ -174,10 +183,10 @@ function TeamPanel({
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <Stat label="Total KM" value={totals.km.toFixed(1)} />
-            <Stat label="Total Calories" value={Math.round(totals.calories).toString()} />
-            <Stat label="Total Workouts" value={totals.workouts.toString()} />
-            <Stat label="Total Healthy Meals" value={totals.meals.toString()} />
+            <Stat label="Total KM" value={fmt2(totals.km)} />
+            <Stat label="Total Calories" value={fmt2(totals.calories)} />
+            <Stat label="Total Workouts" value={String(totals.workouts)} />
+            <Stat label="Total Healthy Meals" value={String(totals.meals)} />
           </div>
 
           {anyWeeklyBonus && (
@@ -198,7 +207,7 @@ function TeamPanel({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
               <div className="text-sm text-gray-700">Total Team Points This Week</div>
-              <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
+              <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
             </div>
           </div>
 
@@ -243,7 +252,7 @@ export default function Home() {
   const [arthurAllBonuses, setArthurAllBonuses] = useState<TeamBonus[]>([]);
   const [jimmyAllBonuses, setJimmyAllBonuses] = useState<TeamBonus[]>([]);
 
-  // --- NEW: read week from URL on first load / navigation
+  // --- week in URL → state
   useEffect(() => {
     if (!router.isReady) return;
     const q = router.query.week;
@@ -253,7 +262,7 @@ export default function Home() {
     }
   }, [router.isReady, router.query.week]);
 
-  // --- NEW: reflect selected week back into the URL for sharing
+  // --- state → week in URL (shareable)
   useEffect(() => {
     if (!router.isReady) return;
     const q = router.query.week;
@@ -383,8 +392,8 @@ export default function Home() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // Points / aggregates
-  const myPoints = useMemo(() => (myRecord ? Math.round(memberPoints(myRecord)) : 0), [myRecord]);
+  // Points / aggregates (two-decimals everywhere)
+  const myPointsRaw = useMemo(() => (myRecord ? memberPoints(myRecord) : 0), [myRecord]);
 
   const arthurWeek = useMemo(() => computeTeam(arthurRoster, arthurRows, arthurBonuses), [arthurRows, arthurRoster, arthurBonuses]);
   const jimmyWeek  = useMemo(() => computeTeam(jimmyRoster, jimmyRows, jimmyBonuses), [jimmyRows, jimmyRoster, jimmyBonuses]);
@@ -497,6 +506,15 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Season Totals (All Weeks) */}
+            <div className="card mb-6">
+              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanelSimple title="Team Arthur" data={arthurAll} />
+                <SeasonPanelSimple title="Team Jimmy" data={jimmyAll} />
+              </div>
+            </div>
+
             {/* My editor */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -509,15 +527,15 @@ export default function Home() {
               ) : (
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Field label="KM walked/run" value={myRecord.km} step={0.1} onChange={(v)=>setMyRecord(r=>r && ({...r, km:v}))} />
-                    <Field label="Calories burned" value={myRecord.calories} step={10} onChange={(v)=>setMyRecord(r=>r && ({...r, calories:v}))} />
+                    <Field label="KM walked/run" value={myRecord.km} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, km:v}))} />
+                    <Field label="Calories burned" value={myRecord.calories} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, calories:v}))} />
                     <Field label="Workouts" value={myRecord.workouts} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, workouts:v}))} />
                     <Field label="Healthy meals" value={myRecord.meals} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, meals:v}))} />
                   </div>
 
                   <div className="mt-4">
                     <div className="text-sm">
-                      Your points this week: <span className="font-semibold">{myPoints}</span>
+                      Your points this week: <span className="font-semibold">{fmt2(myPointsRaw)}</span>
                     </div>
                     <button className="btn btn-primary btn-compact mt-3 w-full md:w-auto" onClick={save} disabled={saving}>
                       {saving ? "Saving…" : "Save / Update"}
@@ -534,7 +552,7 @@ export default function Home() {
                 title="Team Arthur"
                 week={week}
                 totals={arthurWeek.totals}
-                totalPoints={Math.round(arthurWeek.totalPoints)}
+                totalPoints={arthurWeek.totalPoints}
                 rows={arthurRows}
                 isAdmin={isAdmin}
                 habitsActive={arthurHabits}
@@ -547,7 +565,7 @@ export default function Home() {
                 title="Team Jimmy"
                 week={week}
                 totals={jimmyWeek.totals}
-                totalPoints={Math.round(jimmyWeek.totalPoints)}
+                totalPoints={jimmyWeek.totalPoints}
                 rows={jimmyRows}
                 isAdmin={isAdmin}
                 habitsActive={jimmyHabits}
@@ -556,15 +574,6 @@ export default function Home() {
                 onSetHabits={(desired) => setToggle("Jimmy", HABITS_REASON, desired)}
                 onSetExercise={(desired) => setToggle("Jimmy", EXERCISE_REASON, desired)}
               />
-            </div>
-
-            {/* Season Totals (All Weeks) */}
-            <div className="card mb-6">
-              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanelSimple title="Team Arthur" data={arthurAll} />
-                <SeasonPanelSimple title="Team Jimmy" data={jimmyAll} />
-              </div>
             </div>
           </>
         )}
