@@ -55,11 +55,11 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
         <thead>
           <tr className="text-left text-gray-600">
             <th className="py-2 pr-4">Member</th>
-            <th className="py-2 pr-4">KM walked/run</th>
-            <th className="py-2 pr-4">Calories burned</th>
-            <th className="py-2 pr-4">Number of Workouts</th>
-            <th className="py-2 pr-4">Number of Meals</th>
-            <th className="py-2 pr-4">Poits</th>
+            <th className="py-2 pr-4">KM</th>
+            <th className="py-2 pr-4">Calories</th>
+            <th className="py-2 pr-4">Workouts</th>
+            <th className="py-2 pr-4">Meals</th>
+            <th className="py-2 pr-4">Points</th>
           </tr>
         </thead>
         <tbody>
