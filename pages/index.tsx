@@ -283,10 +283,10 @@ export default function Home() {
 
             {/* Season Totals (All Weeks) */}
             <div className="card mb-6">
-              <h2 className="text-lg font-semibold mb-3">Season Totals (All Weeks)</h2>
+              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanelSimple title="Team Arthur — All Weeks" data={arthurAll} />
-                <SeasonPanelSimple title="Team Jimmy — All Weeks" data={jimmyAll} />
+                <SeasonPanelSimple title="Team Arthur" data={arthurAll} />
+                <SeasonPanelSimple title="Team Jimmy" data={jimmyAll} />
               </div>
             </div>
 
@@ -512,15 +512,9 @@ function TeamPanel({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points this week</div>
+              <div className="text-sm text-gray-700">Total Team Points This Week</div>
               <div className="mt-1 text-3xl font-bold">{totalPoints}</div>
             </div>
-            <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points (ALL weeks)</div>
-              <div className="mt-1 text-3xl font-bold">{totalPointsAllWeeks}</div>
-            </div>
-          </div>
-
           <MembersTable rows={rows} />
         </>
       )}
@@ -552,13 +546,13 @@ function SeasonPanelSimple({
     <div className="card">
       <div className="text-lg font-semibold mb-3">{title}</div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <Stat label="KM (all weeks)" value={totals.km.toFixed(1)} />
-        <Stat label="Calories (all weeks)" value={Math.round(totals.calories).toString()} />
-        <Stat label="Workouts (all weeks)" value={totals.workouts.toString()} />
-        <Stat label="Meals (all weeks)" value={totals.meals.toString()} />
+        <Stat label="KM Walked/Run (Total)" value={totals.km.toFixed(1)} />
+        <Stat label="Calories Burned (Total)" value={Math.round(totals.calories).toString()} />
+        <Stat label="Number of Workouts" value={totals.workouts.toString()} />
+        <Stat label="Number of Healthy Meals" value={totals.meals.toString()} />
       </div>
       <div className="card">
-        <div className="text-sm text-gray-700">Total team points (ALL weeks):</div>
+        <div className="text-sm text-gray-700">Total team points</div>
         <div className="mt-1 text-3xl font-bold">{Math.round(totalPoints)}</div>
       </div>
     </div>
