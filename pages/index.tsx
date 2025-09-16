@@ -171,24 +171,92 @@ function ToggleRow({
   );
 }
 
-function SeasonPanelSimple({
+/* ----------------- Season Panel with per-person totals ----------------- */
+
+type SeasonData = {
+  totals: { km: number; calories: number; workouts: number; meals: number; basePoints: number };
+  bonuses: { weeksAll2Count: number; manualSum: number };
+  totalPoints: number;
+};
+
+type SeasonMemberRow = {
+  user_id: string;
+  name: string;
+  km: number;
+  calories: number;
+  workouts: number;
+  meals: number;
+  points: number; // base points across all weeks
+};
+
+function aggregateSeasonMembers(rows: RecordRow[]): SeasonMemberRow[] {
+  const map = new Map<string, SeasonMemberRow>();
+  for (const r of rows) {
+    const key = r.user_id;
+    const cur = map.get(key) || {
+      user_id: r.user_id,
+      name: r.name,
+      km: 0,
+      calories: 0,
+      workouts: 0,
+      meals: 0,
+      points: 0,
+    };
+    cur.km += Number(r.km) || 0;
+    cur.calories += Number(r.calories) || 0;
+    cur.workouts += Number(r.workouts) || 0;
+    cur.meals += Number(r.meals) || 0;
+    cur.points += memberPoints(r); // sum of base points across weeks
+    map.set(key, cur);
+  }
+  // Sort by name
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function SeasonMembersTable({ rowsAllWeeks }: { rowsAllWeeks: RecordRow[] }) {
+  const data = useMemo(() => aggregateSeasonMembers(rowsAllWeeks), [rowsAllWeeks]);
+  if (!data.length) return <p className="text-sm text-gray-600">No entries yet this season.</p>;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr className="text-left text-gray-600">
+            <th className="py-2 pr-4">Member</th>
+            <th className="py-2 pr-4">KM (Total)</th>
+            <th className="py-2 pr-4">Calories (Total)</th>
+            <th className="py-2 pr-4">Workouts (Total)</th>
+            <th className="py-2 pr-4">Meals (Total)</th>
+            <th className="py-2 pr-4">Pts (Total)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((r) => (
+            <tr key={r.user_id} className="border-t border-gray-100">
+              <td className="py-2 pr-4 font-medium">{r.name}</td>
+              <td className="py-2 pr-4">{fmt2(r.km)}</td>
+              <td className="py-2 pr-4">{fmt2(r.calories)}</td>
+              <td className="py-2 pr-4">{r.workouts}</td>
+              <td className="py-2 pr-4">{r.meals}</td>
+              <td className="py-2 pr-4">{fmt2(r.points)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SeasonPanelWithMembers({
   title,
-  data,
+  seasonData,
+  rowsAllWeeks,
 }: {
   title: string;
-  data: {
-    totals: {
-      km: number;
-      calories: number;
-      workouts: number;
-      meals: number;
-      basePoints: number;
-    };
-    bonuses: { weeksAll2Count: number; manualSum: number };
-    totalPoints: number;
-  };
+  seasonData: SeasonData;
+  rowsAllWeeks: RecordRow[];
 }) {
-  const { totals, totalPoints } = data;
+  const { totals, totalPoints } = seasonData;
   return (
     <div className="card">
       <div className="text-lg font-semibold mb-3">{title}</div>
@@ -198,13 +266,16 @@ function SeasonPanelSimple({
         <Stat label="Number of Workouts" value={String(totals.workouts)} />
         <Stat label="Number of Healthy Meals" value={String(totals.meals)} />
       </div>
-      <div className="card">
+      <div className="card mb-4">
         <div className="text-sm text-gray-700">Total team points</div>
         <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
       </div>
+      <SeasonMembersTable rowsAllWeeks={rowsAllWeeks} />
     </div>
   );
 }
+
+/* ---------------------- Weekly Team panel (unchanged) ---------------------- */
 
 function TeamPanel({
   title,
@@ -717,6 +788,23 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Season Totals (All Weeks) WITH per-person table */}
+            <div className="card mb-6">
+              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanelWithMembers
+                  title="Team Arthur"
+                  seasonData={arthurAll}
+                  rowsAllWeeks={arthurAllRows}
+                />
+                <SeasonPanelWithMembers
+                  title="Team Jimmy"
+                  seasonData={jimmyAll}
+                  rowsAllWeeks={jimmyAllRows}
+                />
+              </div>
+            </div>
+
             {/* My editor */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -813,14 +901,6 @@ export default function Home() {
                   setToggle("Jimmy", EXERCISE_REASON, desired)
                 }
               />
-            </div>
-            {/* Season Totals (All Weeks) */}
-            <div className="card mb-6">
-              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanelSimple title="Team Arthur" data={arthurAll} />
-                <SeasonPanelSimple title="Team Jimmy" data={jimmyAll} />
-              </div>
             </div>
           </>
         )}
