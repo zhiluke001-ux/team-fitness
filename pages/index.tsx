@@ -788,23 +788,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Season Totals (All Weeks) WITH per-person table */}
-            <div className="card mb-6">
-              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanelWithMembers
-                  title="Team Arthur"
-                  seasonData={arthurAll}
-                  rowsAllWeeks={arthurAllRows}
-                />
-                <SeasonPanelWithMembers
-                  title="Team Jimmy"
-                  seasonData={jimmyAll}
-                  rowsAllWeeks={jimmyAllRows}
-                />
-              </div>
-            </div>
-
             {/* My editor */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -901,6 +884,23 @@ export default function Home() {
                   setToggle("Jimmy", EXERCISE_REASON, desired)
                 }
               />
+            </div>
+            
+            {/* Season Totals (All Weeks) WITH per-person table */}
+            <div className="card mb-6">
+              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanelWithMembers
+                  title="Team Arthur"
+                  seasonData={arthurAll}
+                  rowsAllWeeks={arthurAllRows}
+                />
+                <SeasonPanelWithMembers
+                  title="Team Jimmy"
+                  seasonData={jimmyAll}
+                  rowsAllWeeks={jimmyAllRows}
+                />
+              </div>
             </div>
           </>
         )}
