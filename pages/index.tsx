@@ -11,7 +11,7 @@ import {
   memberPoints,
   computeTeam,
   computeTeamAcrossWeeks,
-  TeamName
+  TeamName,
 } from "../utils/points";
 import { SITE_NAME } from "../utils/constants";
 
@@ -62,6 +62,19 @@ const weekLabel = (w: number) => `Week ${w} - ${WEEK_DATES[w] ?? ""}`;
 
 // 2-decimal formatter
 const fmt2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : "0.00");
+
+// Parse magic-link tokens from URL hash (client only)
+function parseHashTokens(): { access_token?: string; refresh_token?: string; type?: string } {
+  if (typeof window === "undefined") return {};
+  const h = window.location.hash || "";
+  if (!h.includes("access_token")) return {};
+  const p = new URLSearchParams(h.replace(/^#/, ""));
+  return {
+    access_token: p.get("access_token") || undefined,
+    refresh_token: p.get("refresh_token") || undefined,
+    type: p.get("type") || undefined,
+  };
+}
 
 /* ----------------------- Small presentational UI ----------------------- */
 
@@ -149,21 +162,11 @@ function ToggleRow({
     <div className="flex items-center justify-between">
       <div className="text-sm">{label}</div>
       <div className="flex items-center gap-2">
-        <button
-          className="btn btn-compact"
-          onClick={onMinus}
-          disabled={value <= 0}
-          title="Decrease to 0"
-        >
+        <button className="btn btn-compact" onClick={onMinus} disabled={value <= 0} title="Decrease to 0">
           −
         </button>
         <span className="w-8 text-center font-semibold">{value}</span>
-        <button
-          className="btn btn-compact"
-          onClick={onPlus}
-          disabled={value >= 1}
-          title="Increase to 1"
-        >
+        <button className="btn btn-compact" onClick={onPlus} disabled={value >= 1} title="Increase to 1">
           +
         </button>
       </div>
@@ -209,7 +212,6 @@ function aggregateSeasonMembers(rows: RecordRow[]): SeasonMemberRow[] {
     cur.points += memberPoints(r); // sum of base points across weeks
     map.set(key, cur);
   }
-  // Sort by name
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -275,7 +277,7 @@ function SeasonPanelWithMembers({
   );
 }
 
-/* ---------------------- Weekly Team panel (unchanged) ---------------------- */
+/* ---------------------- Weekly Team panel ---------------------- */
 
 function TeamPanel({
   title,
@@ -358,13 +360,9 @@ function TeamPanel({
                     ✓ All members completed ≥ 2 workouts +{POINTS_SAFE.bonusAllMinWorkouts}
                   </span>
                 )}
-                {habitsActive && (
-                  <span className="badge badge-yes">✓ Healthy Habits Bonus +200</span>
-                )}
+                {habitsActive && <span className="badge badge-yes">✓ Healthy Habits Bonus +200</span>}
                 {exerciseActive && (
-                  <span className="badge badge-yes">
-                    ✓ Full Team Participation in an exercise +200
-                  </span>
+                  <span className="badge badge-yes">✓ Full Team Participation in an exercise +200</span>
                 )}
               </div>
             </div>
@@ -418,7 +416,7 @@ export default function Home() {
   const [arthurAllBonuses, setArthurAllBonuses] = useState<TeamBonus[]>([]);
   const [jimmyAllBonuses, setJimmyAllBonuses] = useState<TeamBonus[]>([]);
 
-  // URL ?week= → state
+  // Keep ?week in URL shareable
   useEffect(() => {
     if (!router.isReady) return;
     const q = router.query.week;
@@ -428,30 +426,36 @@ export default function Home() {
     }
   }, [router.isReady, router.query.week]);
 
-  // state → URL ?week= (shareable)
   useEffect(() => {
     if (!router.isReady) return;
     const q = router.query.week;
     const current = q ? Number(Array.isArray(q) ? q[0] : q) : null;
-
     if (week && current !== week) {
-      router.replace(
-        { pathname: router.pathname, query: { ...router.query, week } },
-        undefined,
-        { shallow: true }
-      );
-    }
-    if (!week && q) {
-      const { week: _omit, ...rest } = router.query;
-      router.replace({ pathname: router.pathname, query: rest }, undefined, {
+      router.replace({ pathname: router.pathname, query: { ...router.query, week } }, undefined, {
         shallow: true,
       });
     }
+    if (!week && q) {
+      const { week: _omit, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
   }, [week, router]);
 
-  // Session init
+  // Session init (magic-link friendly: setSession from hash FIRST; no SSR redirect)
   useEffect(() => {
     (async () => {
+      // 1) Recover from magic-link hash and set session (client only)
+      const { access_token, refresh_token } = parseHashTokens();
+      if (access_token && refresh_token) {
+        const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+        // Clean the hash but keep query (?week=)
+        const url = new URL(window.location.href);
+        url.hash = "";
+        window.history.replaceState({}, "", url.toString());
+        if (error) console.error("setSession error", error);
+      }
+
+      // 2) Now check session normally
       const { data } = await supabase.auth.getSession();
       const uid = data.session?.user.id;
       if (!uid) {
@@ -459,15 +463,12 @@ export default function Home() {
           typeof window !== "undefined"
             ? window.location.pathname + window.location.search
             : "/";
-        router.replace(`/login?next=${encodeURIComponent(next)}`);
-        return;
+        return router.replace(`/login?next=${encodeURIComponent(next)}`);
       }
       setUserId(uid);
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", uid)
-        .maybeSingle();
+
+      // Load profile
+      const { data: prof } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
       setProfile((prof as Profile) ?? null);
       setLoadingSession(false);
     })();
@@ -529,18 +530,12 @@ export default function Home() {
   // Fetch team data for selected week
   const fetchTeams = async (wk = week) => {
     if (!wk) return;
-    const { data: recs } = await supabase
-      .from("records")
-      .select("*")
-      .eq("week", wk);
+    const { data: recs } = await supabase.from("records").select("*").eq("week", wk);
     const list = (recs || []) as RecordRow[];
     setArthurRows(list.filter((r) => r.team === "Arthur"));
     setJimmyRows(list.filter((r) => r.team === "Jimmy"));
 
-    const { data: bons } = await supabase
-      .from("team_bonuses")
-      .select("*")
-      .eq("week", wk);
+    const { data: bons } = await supabase.from("team_bonuses").select("*").eq("week", wk);
     const bonsList = (bons || []) as TeamBonus[];
     setArthurBonuses(bonsList.filter((b) => b.team === "Arthur"));
     setJimmyBonuses(bonsList.filter((b) => b.team === "Jimmy"));
@@ -573,12 +568,7 @@ export default function Home() {
       .channel(`records-w${week}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "records",
-          filter: `week=eq.${week}`,
-        },
+        { event: "*", schema: "public", table: "records", filter: `week=eq.${week}` },
         () => fetchTeams(week)
       )
       .subscribe();
@@ -586,12 +576,7 @@ export default function Home() {
       .channel(`bonuses-w${week}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "team_bonuses",
-          filter: `week=eq.${week}`,
-        },
+        { event: "*", schema: "public", table: "team_bonuses", filter: `week=eq.${week}` },
         () => fetchTeams(week)
       )
       .subscribe();
@@ -605,27 +590,16 @@ export default function Home() {
   useEffect(() => {
     const ch = supabase
       .channel("all-weeks")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "records" },
-        refreshAllTotals
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "team_bonuses" },
-        refreshAllTotals
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "records" }, refreshAllTotals)
+      .on("postgres_changes", { event: "*", schema: "public", table: "team_bonuses" }, refreshAllTotals)
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
   }, []);
 
-  // Points / aggregates (two-decimals everywhere)
-  const myPointsRaw = useMemo(
-    () => (myRecord ? memberPoints(myRecord) : 0),
-    [myRecord]
-  );
+  // Points / aggregates
+  const myPointsRaw = useMemo(() => (myRecord ? memberPoints(myRecord) : 0), [myRecord]);
 
   const arthurWeek = useMemo(
     () => computeTeam(arthurRoster, arthurRows, arthurBonuses),
@@ -637,8 +611,7 @@ export default function Home() {
   );
 
   const arthurAll = useMemo(
-    () =>
-      computeTeamAcrossWeeks(arthurRoster, arthurAllRows, arthurAllBonuses),
+    () => computeTeamAcrossWeeks(arthurRoster, arthurAllRows, arthurAllBonuses),
     [arthurRoster, arthurAllRows, arthurAllBonuses]
   );
   const jimmyAll = useMemo(
@@ -682,13 +655,9 @@ export default function Home() {
   // Admin toggles 0/1
   const isAdmin = profile?.role === "admin";
   const arthurHabits = arthurBonuses.some((b) => b.reason.startsWith(HABITS_REASON));
-  const arthurExercise = arthurBonuses.some((b) =>
-    b.reason.startsWith(EXERCISE_REASON)
-  );
+  const arthurExercise = arthurBonuses.some((b) => b.reason.startsWith(EXERCISE_REASON));
   const jimmyHabits = jimmyBonuses.some((b) => b.reason.startsWith(HABITS_REASON));
-  const jimmyExercise = jimmyBonuses.some((b) =>
-    b.reason.startsWith(EXERCISE_REASON)
-  );
+  const jimmyExercise = jimmyBonuses.some((b) => b.reason.startsWith(EXERCISE_REASON));
 
   async function setToggle(team: TeamName, reason: string, desired: 0 | 1) {
     if (!week || !isAdmin) return;
@@ -788,6 +757,23 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Season Totals (All Weeks) WITH per-person table */}
+            <div className="card mb-6">
+              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SeasonPanelWithMembers
+                  title="Team Arthur"
+                  seasonData={arthurAll}
+                  rowsAllWeeks={arthurAllRows}
+                />
+                <SeasonPanelWithMembers
+                  title="Team Jimmy"
+                  seasonData={jimmyAll}
+                  rowsAllWeeks={jimmyAllRows}
+                />
+              </div>
+            </div>
+
             {/* My editor */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -804,46 +790,33 @@ export default function Home() {
                       label="KM walked/run"
                       value={myRecord.km}
                       step={0.01}
-                      onChange={(v) =>
-                        setMyRecord((r) => r && { ...r, km: v })
-                      }
+                      onChange={(v) => setMyRecord((r) => r && { ...r, km: v })}
                     />
                     <Field
                       label="Calories burned"
                       value={myRecord.calories}
                       step={0.01}
-                      onChange={(v) =>
-                        setMyRecord((r) => r && { ...r, calories: v })
-                      }
+                      onChange={(v) => setMyRecord((r) => r && { ...r, calories: v })}
                     />
                     <Field
                       label="Workouts"
                       value={myRecord.workouts}
                       step={1}
-                      onChange={(v) =>
-                        setMyRecord((r) => r && { ...r, workouts: v })
-                      }
+                      onChange={(v) => setMyRecord((r) => r && { ...r, workouts: v })}
                     />
                     <Field
                       label="Healthy meals"
                       value={myRecord.meals}
                       step={1}
-                      onChange={(v) =>
-                        setMyRecord((r) => r && { ...r, meals: v })
-                      }
+                      onChange={(v) => setMyRecord((r) => r && { ...r, meals: v })}
                     />
                   </div>
 
                   <div className="mt-4">
                     <div className="text-sm">
-                      Your points this week:{" "}
-                      <span className="font-semibold">{fmt2(myPointsRaw)}</span>
+                      Your points this week: <span className="font-semibold">{fmt2(myPointsRaw)}</span>
                     </div>
-                    <button
-                      className="btn btn-primary btn-compact mt-3 w-full md:w-auto"
-                      onClick={save}
-                      disabled={saving}
-                    >
+                    <button className="btn btn-primary btn-compact mt-3 w-full md:w-auto" onClick={save} disabled={saving}>
                       {saving ? "Saving…" : "Save / Update"}
                     </button>
                   </div>
@@ -865,9 +838,7 @@ export default function Home() {
                 exerciseActive={arthurExercise}
                 showAll2={arthurWeek.bonuses.everyHas2Workouts}
                 onSetHabits={(desired) => setToggle("Arthur", HABITS_REASON, desired)}
-                onSetExercise={(desired) =>
-                  setToggle("Arthur", EXERCISE_REASON, desired)
-                }
+                onSetExercise={(desired) => setToggle("Arthur", EXERCISE_REASON, desired)}
               />
               <TeamPanel
                 title="Team Jimmy"
@@ -880,27 +851,8 @@ export default function Home() {
                 exerciseActive={jimmyExercise}
                 showAll2={jimmyWeek.bonuses.everyHas2Workouts}
                 onSetHabits={(desired) => setToggle("Jimmy", HABITS_REASON, desired)}
-                onSetExercise={(desired) =>
-                  setToggle("Jimmy", EXERCISE_REASON, desired)
-                }
+                onSetExercise={(desired) => setToggle("Jimmy", EXERCISE_REASON, desired)}
               />
-            </div>
-            
-            {/* Season Totals (All Weeks) WITH per-person table */}
-            <div className="card mb-6">
-              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SeasonPanelWithMembers
-                  title="Team Arthur"
-                  seasonData={arthurAll}
-                  rowsAllWeeks={arthurAllRows}
-                />
-                <SeasonPanelWithMembers
-                  title="Team Jimmy"
-                  seasonData={jimmyAll}
-                  rowsAllWeeks={jimmyAllRows}
-                />
-              </div>
             </div>
           </>
         )}
@@ -934,12 +886,10 @@ function Onboarding({ onDone }: { onDone: (p: any) => void }) {
         .single();
 
       if (insErr) {
-        // If unique constraint on name fails, show friendly message
         if ((insErr as any).code === "23505" || /duplicate key|unique/i.test(insErr.message)) {
           setError("That display name is already taken. Please choose a different one.");
           return;
         }
-        // If insert failed but profile exists, load it
         const { data: existing, error: selErr } = await supabase
           .from("profiles")
           .select("*")
@@ -973,11 +923,7 @@ function Onboarding({ onDone }: { onDone: (p: any) => void }) {
       </div>
       <div>
         <label className="label">Team</label>
-        <select
-          className="input"
-          value={team}
-          onChange={(e) => setTeam(e.target.value as "Arthur" | "Jimmy")}
-        >
+        <select className="input" value={team} onChange={(e) => setTeam(e.target.value as "Arthur" | "Jimmy")}>
           <option value="Arthur">Team Arthur</option>
           <option value="Jimmy">Team Jimmy</option>
         </select>
@@ -989,25 +935,3 @@ function Onboarding({ onDone }: { onDone: (p: any) => void }) {
     </form>
   );
 }
-
-/* ----------------------- Server-side auth guard ----------------------- */
-
-import type { GetServerSidePropsContext, GetServerSideProps } from "next";
-import { createServerSupabaseClient } from "../lib/supabaseServer";
-
-export const getServerSideProps: GetServerSideProps = async (
-  ctx: GetServerSidePropsContext
-) => {
-  const supabase = createServerSupabaseClient(ctx);
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    const next = ctx.resolvedUrl || "/";
-    return {
-      redirect: { destination: `/login?next=${encodeURIComponent(next)}`, permanent: false },
-    };
-  }
-  return { props: {} };
-};
