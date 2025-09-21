@@ -710,12 +710,17 @@ export default function Home() {
           )}
         </div>
 
-        {!profile ? (
-          <div className="card max-w-lg">
-            <h2 className="text-lg font-semibold mb-2">Complete your profile</h2>
-            <Onboarding onDone={(p) => setProfile(p)} />
-          </div>
-        ) : (
+          {!profile ? (
+            <div className="card max-w-lg">
+              <h2 className="text-lg font-semibold mb-2">Complete your profile</h2>
+              <Onboarding onDone={(p) => setProfile(p)} />
+            </div>
+          ) : !profile.username ? (
+            <div className="card max-w-lg">
+              <h2 className="text-lg font-semibold mb-2">Pick a username</h2>
+              <Onboarding onDone={(p) => setProfile(p)} />
+            </div>
+          ) : (
           <>
             {/* Header */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
