@@ -201,16 +201,10 @@ export default function Login() {
               <button className="btn btn-compact" onClick={sendPasswordSetup} disabled={!email || busy} type="button">
                 Forgot password?
               </button>
-              <span className="text-xs text-gray-500">
-                Sessions persist; use this if you signed out or changed devices.
-              </span>
             </div>
 
             {err && <p className="text-sm text-red-600">{err}</p>}
             {msg && <p className="text-sm text-green-700">{msg}</p>}
-            <p className="text-xs text-gray-500">
-              Tip: Your browser’s built-in password manager is the safest way to remember login.
-            </p>
           </form>
         </div>
       </main>
