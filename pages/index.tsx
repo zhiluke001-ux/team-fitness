@@ -255,9 +255,10 @@ function TeamPanel({
             </div>
           )}
 
+          {/* CHANGED: match the Season black bar style */}
           <div className="grid-1-2 mb-4">
-            <div className="card bg-white">
-              <div className="text-sm text-slate-700">Total Team Points This Week</div>
+            <div className="card bg-brand-black text-white">
+              <div className="text-sm opacity-90">Total team points this week</div>
               <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
             </div>
           </div>
@@ -460,7 +461,7 @@ export default function Home() {
     router.replace(`/login?next=${encodeURIComponent(next)}`);
   }
 
-  // Admin toggles: insert/delete a weekly team bonus and refresh UI
+  // Admin toggles
   async function setToggle(team: TeamName, reason: string, desired: 0 | 1) {
     if (!week) return;
     const list = team === "Arthur" ? arthurBonuses : jimmyBonuses;
@@ -500,30 +501,16 @@ export default function Home() {
     <>
       <Head><title>{SITE_NAME}</title><meta name="viewport" content="width=device-width, initial-scale=1" /></Head>
 
-      {/* Top bar */}
-<header className="topbar">
-  <div className="container-app flex items-center justify-between py-3">
-    <div className="flex items-center gap-3">
-      {/* Logo: keep only one of the two options below */}
-
-      {/* A) Plain logo (keeps aspect ratio, no squish) */}
-      <img
-        src="/logo.webp"       // or /logo.svg
-        alt="ATAG"
-        className="h-6 w-auto object-contain shrink-0"
-      />
-
-      <span className="font-semibold tracking-tight">{SITE_NAME}</span>
-    </div>
-    {userId && (
-      <button className="btn btn-primary btn-compact" onClick={signOut}>
-        Sign out
-      </button>
-    )}
-  </div>
-</header>
-
-
+      {/* header */}
+      <header className="topbar">
+        <div className="container-app flex items-center justify-between py-3">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="ATAG" className="h-6 w-auto object-contain shrink-0" />
+            <span className="font-semibold tracking-tight">{SITE_NAME}</span>
+          </div>
+          {userId && <button className="btn btn-primary btn-compact" onClick={signOut}>Sign out</button>}
+        </div>
+      </header>
 
       <main className="container-app py-5 sm:py-8">
         {!profile ? (
@@ -566,7 +553,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
 
 
             {/* Your weekly entry */}
@@ -621,6 +607,7 @@ export default function Home() {
                 onSetExercise={(d)=>setToggle("Jimmy", EXERCISE_REASON, d)}
               />
             </div>
+            
             {/* Season totals */}
             <div className="card mb-6">
               <h2 className="mb-3 text-lg font-semibold">Season Total (All Weeks)</h2>
@@ -636,7 +623,7 @@ export default function Home() {
   );
 }
 
-/* ---------------------- Onboarding (unchanged logic) ---------------------- */
+/* ---------------------- Onboarding ---------------------- */
 
 function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
   const [name, setName] = useState("");
