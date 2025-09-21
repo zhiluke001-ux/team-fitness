@@ -508,7 +508,7 @@ export default function Home() {
 
       {/* A) Plain logo (keeps aspect ratio, no squish) */}
       <img
-        src="/logo.png"       // or /logo.svg
+        src="/logo.webp"       // or /logo.svg
         alt="ATAG"
         className="h-6 w-auto object-contain shrink-0"
       />
