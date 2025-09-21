@@ -376,7 +376,7 @@ export default function Home() {
     }
   }, [week, router]);
 
-  // Session init (magic-link friendly)
+  // Session init (magic-link friendly) + fetch profile
   useEffect(() => {
     (async () => {
       const { access_token, refresh_token } = parseHashTokens();
@@ -409,6 +409,19 @@ export default function Home() {
     });
     return () => sub.data.subscription.unsubscribe();
   }, [router]);
+
+  // Client-side safety net: ensure profiles.email is filled
+  useEffect(() => {
+    (async () => {
+      const { data: sess } = await supabase.auth.getSession();
+      const user = sess.session?.user;
+      if (!user?.id || !user.email) return;
+      const { data: prof } = await supabase.from("profiles").select("email").eq("id", user.id).maybeSingle();
+      if (prof && !prof.email) {
+        await supabase.from("profiles").update({ email: user.email }).eq("id", user.id);
+      }
+    })();
+  }, []);
 
   // Rosters
   useEffect(() => {
@@ -687,7 +700,7 @@ function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
       if (!uid) { setError("Not signed in."); return; }
 
       if (existing) {
-        // UPDATE only (no insert): do not touch name unless you want to allow rename.
+        // UPDATE only (no insert)
         const patch: any = {};
         if (!existing.username && username) patch.username = username.trim().toLowerCase();
         if (existing.team !== team) patch.team = team;
@@ -705,7 +718,7 @@ function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
         return;
       }
 
-      // No row yet → INSERT (first-time users only)
+      // No row yet → INSERT
       const handle = username.trim().toLowerCase();
       const { data: inserted, error } = await supabase
         .from("profiles")
