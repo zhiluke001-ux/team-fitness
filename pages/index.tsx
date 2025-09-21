@@ -255,13 +255,12 @@ function TeamPanel({
             </div>
           )}
 
-          {/* CHANGED: match the Season black bar style */}
-          <div className="grid-1-2 mb-4">
-            <div className="card bg-brand-black text-white">
-              <div className="text-sm opacity-90">Total team points this week</div>
-              <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
-            </div>
-          </div>
+        {/* Match Season black bar: full width */}
+        <div className="card mb-4 bg-brand-black text-white w-full">
+          <div className="text-sm opacity-90">Total team points this week</div>
+          <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
+        </div>
+
 
           <MembersTable rows={rows} />
         </>
