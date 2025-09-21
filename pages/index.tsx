@@ -38,17 +38,13 @@ const WEEK_DATES: Record<number, string> = {
 const weekLabel = (w: number) => `Week ${w} - ${WEEK_DATES[w] ?? ""}`;
 const fmt2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : "0.00");
 
-// Parse magic-link tokens from URL hash (legacy support)
+// legacy magic-link support
 function parseHashTokens(): { access_token?: string; refresh_token?: string; type?: string } {
   if (typeof window === "undefined") return {};
   const h = window.location.hash || "";
   if (!h.includes("access_token")) return {};
   const p = new URLSearchParams(h.replace(/^#/, ""));
-  return {
-    access_token: p.get("access_token") || undefined,
-    refresh_token: p.get("refresh_token") || undefined,
-    type: p.get("type") || undefined,
-  };
+  return { access_token: p.get("access_token") || undefined, refresh_token: p.get("refresh_token") || undefined, type: p.get("type") || undefined };
 }
 
 /* ----------------- Small presentational components ----------------- */
@@ -59,54 +55,49 @@ function Field({ label, value, step = 0.1, onChange }:{
   return (
     <div>
       <label className="label">{label}</label>
-      <input
-        type="number"
-        min={0}
-        step={step}
-        className="input"
-        value={Number.isFinite(value) ? value : 0}
-        onChange={(e)=>onChange(Number(e.target.value))}
-      />
+      <input type="number" min={0} step={step} className="input"
+             value={Number.isFinite(value) ? value : 0}
+             onChange={(e)=>onChange(Number(e.target.value))} />
     </div>
   );
 }
 
 function Stat({ label, value }:{ label:string; value:string }) {
   return (
-    <div className="card">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-xl font-semibold">{value}</div>
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{value}</div>
     </div>
   );
 }
 
 function MembersTable({ rows }:{ rows: RecordRow[] }) {
-  if (!rows?.length) return <p className="text-sm text-gray-600">No entries yet for this week.</p>;
+  if (!rows?.length) return <p className="text-sm text-slate-600">No entries yet for this week.</p>;
   const ordered = [...rows].sort((a,b)=>a.name.localeCompare(b.name));
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
+    <div className="table-wrap">
+      <table className="table">
         <thead>
-        <tr className="text-left text-gray-600">
-          <th className="py-2 pr-4">Member</th>
-          <th className="py-2 pr-4">KM</th>
-          <th className="py-2 pr-4">Calories</th>
-          <th className="py-2 pr-4">Workouts</th>
-          <th className="py-2 pr-4">Meals</th>
-          <th className="py-2 pr-4">Pts</th>
-        </tr>
+          <tr className="text-slate-600">
+            <th className="th">Member</th>
+            <th className="th">KM</th>
+            <th className="th">Calories</th>
+            <th className="th">Workouts</th>
+            <th className="th">Meals</th>
+            <th className="th">Pts</th>
+          </tr>
         </thead>
         <tbody>
-        {ordered.map(r=>(
-          <tr key={`${r.user_id}-${r.week}`} className="border-t border-gray-100">
-            <td className="py-2 pr-4 font-medium">{r.name}</td>
-            <td className="py-2 pr-4">{fmt2(Number(r.km||0))}</td>
-            <td className="py-2 pr-4">{fmt2(Number(r.calories||0))}</td>
-            <td className="py-2 pr-4">{r.workouts}</td>
-            <td className="py-2 pr-4">{r.meals}</td>
-            <td className="py-2 pr-4">{fmt2(memberPoints(r))}</td>
-          </tr>
-        ))}
+          {ordered.map(r=>(
+            <tr key={`${r.user_id}-${r.week}`} className="border-t border-slate-100">
+              <td className="td font-medium">{r.name}</td>
+              <td className="td">{fmt2(Number(r.km||0))}</td>
+              <td className="td">{fmt2(Number(r.calories||0))}</td>
+              <td className="td">{r.workouts}</td>
+              <td className="td">{r.meals}</td>
+              <td className="td">{fmt2(memberPoints(r))}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -120,89 +111,86 @@ function ToggleRow({
     <div className="flex items-center justify-between">
       <div className="text-sm">{label}</div>
       <div className="flex items-center gap-2">
-        <button className="btn btn-compact" onClick={onMinus} disabled={value <= 0} title="Decrease to 0">−</button>
+        <button className="btn btn-compact btn-ghost" onClick={onMinus} disabled={value <= 0} title="Decrease to 0">−</button>
         <span className="w-8 text-center font-semibold">{value}</span>
-        <button className="btn btn-compact" onClick={onPlus} disabled={value >= 1} title="Increase to 1">+</button>
+        <button className="btn btn-compact btn-ghost" onClick={onPlus} disabled={value >= 1} title="Increase to 1">+</button>
       </div>
     </div>
   );
 }
 
-/* ----------------- Season totals with member table ----------------- */
+/* ----------------- Season tables ----------------- */
 
 type SeasonData = {
   totals: { km:number; calories:number; workouts:number; meals:number; basePoints:number };
   bonuses: { weeksAll2Count:number; manualSum:number };
   totalPoints: number;
 };
-type SeasonMemberRow = {
-  user_id: string; name: string; km:number; calories:number; workouts:number; meals:number; points:number;
-};
-
-function aggregateSeasonMembers(rows: RecordRow[]): SeasonMemberRow[] {
-  const map = new Map<string, SeasonMemberRow>();
-  for (const r of rows) {
-    const cur = map.get(r.user_id) || { user_id:r.user_id, name:r.name, km:0, calories:0, workouts:0, meals:0, points:0 };
-    cur.km += Number(r.km)||0;
-    cur.calories += Number(r.calories)||0;
-    cur.workouts += Number(r.workouts)||0;
-    cur.meals += Number(r.meals)||0;
-    cur.points += memberPoints(r);
-    map.set(r.user_id, cur);
-  }
-  return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
-}
 
 function SeasonMembersTable({ rowsAllWeeks }:{ rowsAllWeeks: RecordRow[] }) {
-  const data = useMemo(()=>aggregateSeasonMembers(rowsAllWeeks), [rowsAllWeeks]);
-  if (!data.length) return <p className="text-sm text-gray-600">No entries yet this season.</p>;
+  const map = new Map<string, { user_id:string; name:string; km:number; calories:number; workouts:number; meals:number; points:number }>();
+  for (const r of rowsAllWeeks) {
+    const cur = map.get(r.user_id) || { user_id:r.user_id, name:r.name, km:0, calories:0, workouts:0, meals:0, points:0 };
+    cur.km += Number(r.km)||0; cur.calories += Number(r.calories)||0; cur.workouts += Number(r.workouts)||0; cur.meals += Number(r.meals)||0; cur.points += memberPoints(r);
+    map.set(r.user_id, cur);
+  }
+  const data = [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+
+  if (!data.length) return <p className="text-sm text-slate-600">No entries yet this season.</p>;
+
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
+    <div className="table-wrap">
+      <table className="table">
         <thead>
-        <tr className="text-left text-gray-600">
-          <th className="py-2 pr-4">Member</th>
-          <th className="py-2 pr-4">KM (Total)</th>
-          <th className="py-2 pr-4">Calories (Total)</th>
-          <th className="py-2 pr-4">Workouts (Total)</th>
-          <th className="py-2 pr-4">Meals (Total)</th>
-          <th className="py-2 pr-4">Pts (Total)</th>
-        </tr>
+          <tr className="text-slate-600">
+            <th className="th">Member</th>
+            <th className="th">KM (Total)</th>
+            <th className="th">Calories (Total)</th>
+            <th className="th">Workouts</th>
+            <th className="th">Meals</th>
+            <th className="th">Pts (Total)</th>
+          </tr>
         </thead>
         <tbody>
-        {data.map(r=>(
-          <tr key={r.user_id} className="border-t border-gray-100">
-            <td className="py-2 pr-4 font-medium">{r.name}</td>
-            <td className="py-2 pr-4">{fmt2(r.km)}</td>
-            <td className="py-2 pr-4">{fmt2(r.calories)}</td>
-            <td className="py-2 pr-4">{r.workouts}</td>
-            <td className="py-2 pr-4">{r.meals}</td>
-            <td className="py-2 pr-4">{fmt2(r.points)}</td>
-          </tr>
-        ))}
+          {data.map(r=>(
+            <tr key={r.user_id} className="border-t border-slate-100">
+              <td className="td font-medium">{r.name}</td>
+              <td className="td">{fmt2(r.km)}</td>
+              <td className="td">{fmt2(r.calories)}</td>
+              <td className="td">{r.workouts}</td>
+              <td className="td">{r.meals}</td>
+              <td className="td">{fmt2(r.points)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
 
-function SeasonPanelWithMembers({
-  title, seasonData, rowsAllWeeks
-}:{ title:string; seasonData: SeasonData; rowsAllWeeks: RecordRow[] }) {
+function SeasonPanelWithMembers({ title, seasonData, rowsAllWeeks }:{
+  title:string; seasonData: SeasonData; rowsAllWeeks: RecordRow[];
+}) {
   const { totals, totalPoints } = seasonData;
   return (
     <div className="card">
-      <div className="text-lg font-semibold mb-3">{title}</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-lg font-semibold">{title}</div>
+        <span className="badge">Season</span>
+      </div>
+
+      <div className="grid-1-2-4 mb-4">
         <Stat label="KM Walked/Run (Total)" value={fmt2(totals.km)} />
         <Stat label="Calories Burned (Total)" value={fmt2(totals.calories)} />
         <Stat label="Number of Workouts" value={String(totals.workouts)} />
         <Stat label="Number of Healthy Meals" value={String(totals.meals)} />
       </div>
-      <div className="card mb-4">
-        <div className="text-sm text-gray-700">Total team points</div>
+
+      <div className="card mb-4 bg-brand-black text-white">
+        <div className="text-sm opacity-90">Total team points</div>
         <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
       </div>
+
       <SeasonMembersTable rowsAllWeeks={rowsAllWeeks} />
     </div>
   );
@@ -228,20 +216,19 @@ function TeamPanel({
   const anyWeeklyBonus = showAll2 || habitsActive || exerciseActive;
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">
-          {title} {week ? `(Week ${week} - ${WEEK_DATES[week] || ""})` : ""}
-        </h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">{title} {week ? `(Week ${week} - ${WEEK_DATES[week] || ""})` : ""}</h2>
+        <span className="badge">Weekly</span>
       </div>
 
       {!week ? (
-        <p className="text-sm text-gray-600">Pick a week.</p>
+        <p className="text-sm text-slate-600">Pick a week.</p>
       ) : (
         <>
           {isAdmin && (
             <div className="card mb-4">
-              <div className="text-sm font-medium mb-2">Admin bonuses (0–1 each)</div>
-              <div className="grid grid-cols-1 gap-3">
+              <div className="mb-2 text-sm font-medium">Admin bonuses (0–1 each)</div>
+              <div className="grid gap-3">
                 <ToggleRow label="Healthy Habits Bonus /week (+200)" value={habitsActive?1:0}
                            onMinus={()=>onSetHabits(0)} onPlus={()=>onSetHabits(1)} />
                 <ToggleRow label="Full Team Participation in an exercise (+200)" value={exerciseActive?1:0}
@@ -250,7 +237,7 @@ function TeamPanel({
             </div>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid-1-2-4 mb-4">
             <Stat label="Total KM" value={fmt2(totals.km)} />
             <Stat label="Total Calories" value={fmt2(totals.calories)} />
             <Stat label="Total Workouts" value={String(totals.workouts)} />
@@ -259,18 +246,18 @@ function TeamPanel({
 
           {anyWeeklyBonus && (
             <div className="card mb-4">
-              <div className="text-sm font-medium mb-2">Weekly Bonuses</div>
+              <div className="mb-2 text-sm font-medium">Weekly Bonuses</div>
               <div className="flex flex-wrap gap-2">
-                {showAll2 && <span className="badge badge-yes">✓ All members completed ≥ 2 workouts +{POINTS_SAFE.bonusAllMinWorkouts}</span>}
+                {showAll2 && <span className="badge badge-yes">✓ All members ≥ 2 workouts +{POINTS_SAFE.bonusAllMinWorkouts}</span>}
                 {habitsActive && <span className="badge badge-yes">✓ Healthy Habits Bonus +200</span>}
-                {exerciseActive && <span className="badge badge-yes">✓ Full Team Participation in an exercise +200</span>}
+                {exerciseActive && <span className="badge badge-yes">✓ Full Team Participation +200</span>}
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="card">
-              <div className="text-sm text-gray-700">Total Team Points This Week</div>
+          <div className="grid-1-2 mb-4">
+            <div className="card bg-white">
+              <div className="text-sm text-slate-700">Total Team Points This Week</div>
               <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
             </div>
           </div>
@@ -309,7 +296,7 @@ export default function Home() {
   const [arthurAllBonuses, setArthurAllBonuses] = useState<TeamBonus[]>([]);
   const [jimmyAllBonuses, setJimmyAllBonuses] = useState<TeamBonus[]>([]);
 
-  // URL ?week= → state
+  // sync ?week
   useEffect(() => {
     if (!router.isReady) return;
     const q = router.query.week;
@@ -317,7 +304,6 @@ export default function Home() {
     if (!Number.isNaN(w) && w >= 1 && w <= 24) setWeek(w);
   }, [router.isReady, router.query.week]);
 
-  // state → URL ?week=
   useEffect(() => {
     if (!router.isReady) return;
     const q = router.query.week;
@@ -332,15 +318,14 @@ export default function Home() {
     }
   }, [week, router]);
 
-  // Session init (magic-link friendly) + fetch profile
+  // Session init
   useEffect(() => {
     (async () => {
       const { access_token, refresh_token } = parseHashTokens();
       if (access_token && refresh_token) {
         const { error } = await supabase.auth.setSession({ access_token, refresh_token });
         const url = new URL(window.location.href);
-        url.hash = "";
-        window.history.replaceState({}, "", url.toString());
+        url.hash = ""; window.history.replaceState({}, "", url.toString());
         if (error) console.error("setSession error", error);
       }
 
@@ -406,7 +391,7 @@ export default function Home() {
   };
   useEffect(() => { fetchTeams(); }, [week]);
 
-  // Season (all weeks)
+  // Season totals
   async function refreshAllTotals() {
     const { data: recs } = await supabase.from("records").select("*");
     const list = (recs || []) as RecordRow[];
@@ -460,7 +445,7 @@ export default function Home() {
   }
 
   async function signOut() {
-    // 1) Turn off autoSignIn but keep remembered creds
+    // disable auto sign-in (keep creds); skip next auto once
     try {
       const REMEMBER_KEY = "atag-remember-cred";
       const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
@@ -468,38 +453,11 @@ export default function Home() {
         const saved = JSON.parse(raw);
         localStorage.setItem(REMEMBER_KEY, JSON.stringify({ ...saved, autoSignIn: false }));
       }
-      // 2) One-time guard to skip auto on next visit
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("atag-skip-auto", "1");
-      }
-    } catch { /* ignore */ }
-  
-    // 3) Sign out and go to login
+      if (typeof window !== "undefined") sessionStorage.setItem("atag-skip-auto", "1");
+    } catch {}
     await supabase.auth.signOut();
     const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
     router.replace(`/login?next=${encodeURIComponent(next)}`);
-  }
-
-
-  // Admin toggles
-  const isAdmin = profile?.role === "admin";
-  const arthurHabits   = arthurBonuses.some(b => b.reason.startsWith(HABITS_REASON));
-  const arthurExercise = arthurBonuses.some(b => b.reason.startsWith(EXERCISE_REASON));
-  const jimmyHabits    = jimmyBonuses.some(b => b.reason.startsWith(HABITS_REASON));
-  const jimmyExercise  = jimmyBonuses.some(b => b.reason.startsWith(EXERCISE_REASON));
-
-  async function setToggle(team: TeamName, reason: string, desired: 0 | 1) {
-    if (!week || !isAdmin) return;
-    const list = team === "Arthur" ? arthurBonuses : jimmyBonuses;
-    const has = list.some(b => b.reason.startsWith(reason));
-    if (desired === 1 && !has) {
-      const { error } = await supabase.from("team_bonuses").insert({ team, week, points: 200, reason, created_by: userId });
-      if (error) setError(error.message);
-    } else if (desired === 0 && has) {
-      const { error } = await supabase.from("team_bonuses").delete().eq("team", team).eq("week", week).like("reason", `${reason}%`);
-      if (error) setError(error.message);
-    }
-    await fetchTeams(week);
   }
 
   if (loadingSession) {
@@ -507,7 +465,7 @@ export default function Home() {
       <>
         <Head><title>{SITE_NAME}</title></Head>
         <main className="min-h-screen grid place-items-center px-4">
-          <div className="card text-sm text-gray-700">Loading your session…</div>
+          <div className="card text-sm text-slate-700">Loading your session…</div>
         </main>
       </>
     );
@@ -516,27 +474,37 @@ export default function Home() {
   return (
     <>
       <Head><title>{SITE_NAME}</title><meta name="viewport" content="width=device-width, initial-scale=1" /></Head>
-      <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold">{SITE_NAME}</h1>
+
+      {/* Top bar */}
+      <header className="topbar">
+        <div className="container-app flex items-center justify-between py-3">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded bg-brand-red" />
+            <span className="font-semibold tracking-tight">{SITE_NAME}</span>
+          </div>
           {userId && <button className="btn btn-primary btn-compact" onClick={signOut}>Sign out</button>}
         </div>
+      </header>
 
+      <main className="container-app py-5 sm:py-8">
         {!profile ? (
-          // NEW user (no row yet) → INSERT via Onboarding
-          <div className="card max-w-lg">
-            <h2 className="text-lg font-semibold mb-2">Complete your profile</h2>
+          <div className="section max-w-lg">
+            <h2 className="mb-2 text-lg font-semibold">Complete your profile</h2>
             <Onboarding onDone={(p) => setProfile(p)} />
           </div>
         ) : (
           <>
+            {/* Top summary row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="card">
-                <div className="text-xs text-gray-500">You are</div>
+                <div className="text-xs text-slate-500">You are</div>
                 <div className="text-lg font-semibold">{profile.name}</div>
-                <div className="badge mt-2">{profile.team === "Arthur" ? "Team Arthur" : "Team Jimmy"}</div>
-                {isAdmin && <div className="badge badge-yes ml-2">Admin</div>}
+                <div className="mt-2 inline-flex items-center gap-2">
+                  <div className="badge">{profile.team === "Arthur" ? "Team Arthur" : "Team Jimmy"}</div>
+                  {profile.role === "admin" && <div className="badge badge-yes">Admin</div>}
+                </div>
               </div>
+
               <div className="card">
                 <label className="label">Week (1–24)</label>
                 <select className="input" value={week ?? ""} onChange={(e) => setWeek(Number(e.target.value) || null)}>
@@ -544,32 +512,36 @@ export default function Home() {
                   {WEEKS_SAFE.map((w) => <option key={w} value={w}>{weekLabel(w)}</option>)}
                 </select>
               </div>
+
               <div className="card">
                 <div className="text-sm font-medium">Scoring</div>
-                <div className="text-xs text-gray-600 mt-1 space-y-1">
+                <div className="mt-2 grid grid-cols-1 gap-1 text-[13px] text-slate-600">
                   <div>Every 1 km logged 10 pts</div>
                   <div>Every 1,000 calories burned 100 pts</div>
                   <div>Number of workout 20 pts</div>
                   <div>No of healthy meal 20 pts</div>
                   <div>All members complete ≥ 2 workouts/week 200 pts</div>
-                  <div className="pt-1 border-t border-gray-100" />
+                  <div className="border-t border-slate-100 pt-1" />
                   <div>Healthy Habits Bonus /week 200 pts</div>
                   <div>Full Team Participation in an exercise 200 pts</div>
                 </div>
               </div>
             </div>
 
-            <div className="card mb-6">
-              <div className="flex items-center justify-between mb-3">
+
+
+            {/* Your weekly entry */}
+            <div className="section">
+              <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Your Weekly Entry</h2>
-                {!week && <span className="text-xs text-gray-500">Pick a week</span>}
+                {!week && <span className="text-xs text-slate-500">Pick a week</span>}
               </div>
 
               {!week ? null : !myRecord ? (
-                <p className="text-sm text-gray-600">Preparing your entry…</p>
+                <p className="text-sm text-slate-600">Preparing your entry…</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Field label="KM walked/run" value={myRecord.km} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, km:v}))} />
                     <Field label="Calories burned" value={myRecord.calories} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, calories:v}))} />
                     <Field label="Workouts" value={myRecord.workouts} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, workouts:v}))} />
@@ -577,8 +549,10 @@ export default function Home() {
                   </div>
 
                   <div className="mt-4">
-                    <div className="text-sm">Your points this week: <span className="font-semibold">{fmt2(myPointsRaw)}</span></div>
-                    <button className="btn btn-primary btn-compact mt-3 w-full md:w-auto" onClick={save} disabled={saving}>
+                    <div className="text-sm">
+                      Your points this week: <span className="font-semibold">{fmt2(myPointsRaw)}</span>
+                    </div>
+                    <button className="btn btn-primary btn-compact mt-3 w-full sm:w-auto" onClick={save} disabled={saving}>
                       {saving ? "Saving…" : "Save / Update"}
                     </button>
                   </div>
@@ -587,30 +561,34 @@ export default function Home() {
               {error && <p className="mt-3 text-sm text-red-600">Error: {error}</p>}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Weekly team panels */}
+            <div className="grid-1-2 gap-6">
               <TeamPanel
                 title="Team Arthur" week={week}
                 totals={arthurWeek.totals} totalPoints={arthurWeek.totalPoints} rows={arthurRows}
-                isAdmin={isAdmin} habitsActive={arthurHabits} exerciseActive={arthurExercise}
+                isAdmin={profile.role === "admin"} habitsActive={arthurBonuses.some(b=>b.reason.startsWith(HABITS_REASON))}
+                exerciseActive={arthurBonuses.some(b=>b.reason.startsWith(EXERCISE_REASON))}
                 showAll2={arthurWeek.bonuses.everyHas2Workouts}
-                onSetHabits={(desired)=>setToggle("Arthur", HABITS_REASON, desired)}
-                onSetExercise={(desired)=>setToggle("Arthur", EXERCISE_REASON, desired)}
+                onSetHabits={(d)=>setToggle("Arthur", HABITS_REASON, d)}
+                onSetExercise={(d)=>setToggle("Arthur", EXERCISE_REASON, d)}
               />
               <TeamPanel
                 title="Team Jimmy" week={week}
                 totals={jimmyWeek.totals} totalPoints={jimmyWeek.totalPoints} rows={jimmyRows}
-                isAdmin={isAdmin} habitsActive={jimmyHabits} exerciseActive={jimmyExercise}
+                isAdmin={profile.role === "admin"} habitsActive={jimmyBonuses.some(b=>b.reason.startsWith(HABITS_REASON))}
+                exerciseActive={jimmyBonuses.some(b=>b.reason.startsWith(EXERCISE_REASON))}
                 showAll2={jimmyWeek.bonuses.everyHas2Workouts}
-                onSetHabits={(desired)=>setToggle("Jimmy", HABITS_REASON, desired)}
-                onSetExercise={(desired)=>setToggle("Jimmy", EXERCISE_REASON, desired)}
+                onSetHabits={(d)=>setToggle("Jimmy", HABITS_REASON, d)}
+                onSetExercise={(d)=>setToggle("Jimmy", EXERCISE_REASON, d)}
               />
             </div>
-            
-            <div className="card mb-6">
-              <h2 className="text-lg font-semibold mb-3">Season Total (All Weeks)</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            {/* Season totals */}
+            <div className="section">
+              <h2 className="mb-3 text-lg font-semibold">Season Total (All Weeks)</h2>
+              <div className="grid-1-2 gap-6">
                 <SeasonPanelWithMembers title="Team Arthur" seasonData={arthurAll as SeasonData} rowsAllWeeks={arthurAllRows} />
-                <SeasonPanelWithMembers title="Team Jimmy" seasonData={jimmyAll as SeasonData} rowsAllWeeks={jimmyAllRows} />
+                <SeasonPanelWithMembers title="Team Jimmy"  seasonData={jimmyAll  as SeasonData} rowsAllWeeks={jimmyAllRows} />
               </div>
             </div>
           </>
@@ -620,7 +598,7 @@ export default function Home() {
   );
 }
 
-/* ---------------------- Onboarding (insert only if missing) ---------------------- */
+/* ---------------------- Onboarding (unchanged logic) ---------------------- */
 
 function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
   const [name, setName] = useState("");
@@ -652,34 +630,20 @@ function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
       if (!uid) { setError("Not signed in."); return; }
 
       if (existing) {
-        // UPDATE only (no insert)
         const patch: any = {};
         if (existing.team !== team) patch.team = team;
-
         if (Object.keys(patch).length === 0) { onDone(existing); return; }
 
-        const { data: updated, error } = await supabase
-          .from("profiles")
-          .update(patch)
-          .eq("id", uid)
-          .select("*")
-          .single();
+        const { data: updated, error } = await supabase.from("profiles").update(patch).eq("id", uid).select("*").single();
         if (error) { setError(error.message); return; }
         onDone(updated as Profile);
         return;
       }
 
-      // No row yet → INSERT
-      const { data: inserted, error } = await supabase
-        .from("profiles")
-        .insert({ id: uid, name, team })
-        .select("*")
-        .single();
+      const { data: inserted, error } = await supabase.from("profiles").insert({ id: uid, name, team }).select("*").single();
       if (error) { setError(error.message); return; }
       onDone(inserted as Profile);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
@@ -687,7 +651,7 @@ function Onboarding({ onDone }:{ onDone:(p:Profile)=>void }) {
       <div>
         <label className="label">Display name</label>
         <input className="input" required value={name} onChange={(e)=>setName(e.target.value)} placeholder="Your name" disabled={!!existing} />
-        {existing && <p className="text-xs text-gray-500 mt-1">Display name already set. We won’t create a new profile.</p>}
+        {existing && <p className="mt-1 text-xs text-slate-500">Display name already set. We won’t create a new profile.</p>}
       </div>
       <div>
         <label className="label">Team</label>
