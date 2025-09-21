@@ -861,69 +861,70 @@ export default function Home() {
   );
 }
 
-function Onboarding({ onDone }: { onDone: (p: any) => void }) {
+function Onboarding({ onDone }:{ onDone:(p:any)=>void }) {
   const [name, setName] = useState("");
-  const [team, setTeam] = useState<"Arthur" | "Jimmy">("Arthur");
+  const [team, setTeam] = useState<"Arthur"|"Jimmy">("Arthur");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(undefined);
-    setSaving(true);
+    setError(undefined); setSaving(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       const uid = session.session?.user.id;
-      if (!uid) {
-        setError("Not signed in.");
-        return;
-      }
+      if (!uid) { setError("Not signed in."); return; }
+
+      // enforce lowercase username (optional)
+      const handle = username.trim().toLowerCase();
 
       const { data, error: insErr } = await supabase
         .from("profiles")
-        .insert({ id: uid, name, team })
+        .insert({ id: uid, name, team, username: handle })
         .select("*")
         .single();
 
       if (insErr) {
-        if ((insErr as any).code === "23505" || /duplicate key|unique/i.test(insErr.message)) {
-          setError("That display name is already taken. Please choose a different one.");
+        // unique violations for name or username
+        if (/(duplicate|unique)/i.test(insErr.message)) {
+          setError("Display name or username already taken. Please choose a different one.");
           return;
         }
-        const { data: existing, error: selErr } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", uid)
-          .single();
-        if (selErr || !existing) {
-          setError(insErr.message || "Could not save profile.");
-          return;
-        }
-        onDone(existing);
-        return;
-      }
+        // If row exists, try updating missing fields (e.g., adding username)
+        const { data: existing } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+        if (!existing) { setError(insErr.message || "Could not save profile."); return; }
 
+        const patch: any = {};
+        if (!existing.name) patch.name = name;
+        if (!existing.username && handle) patch.username = handle;
+        if (existing.team !== team) patch.team = team;
+
+        if (Object.keys(patch).length) {
+          const { data: updated, error: upErr } = await supabase.from("profiles").update(patch).eq("id", uid).select("*").single();
+          if (upErr) { setError(upErr.message); return; }
+          onDone(updated); return;
+        }
+        onDone(existing); return;
+      }
       onDone(data);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
     <form onSubmit={submit} className="grid grid-cols-1 gap-3">
       <div>
         <label className="label">Display name</label>
-        <input
-          className="input"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Your name"
-        />
+        <input className="input" required value={name} onChange={(e)=>setName(e.target.value)} placeholder="Your name" />
+      </div>
+      <div>
+        <label className="label">Username</label>
+        <input className="input" required value={username} onChange={(e)=>setUsername(e.target.value)} placeholder="yourhandle" />
+        <p className="text-xs text-gray-500 mt-1">Lowercase letters/numbers recommended. Must be unique.</p>
       </div>
       <div>
         <label className="label">Team</label>
-        <select className="input" value={team} onChange={(e) => setTeam(e.target.value as "Arthur" | "Jimmy")}>
+        <select className="input" value={team} onChange={(e)=>setTeam(e.target.value as "Arthur"|"Jimmy")}>
           <option value="Arthur">Team Arthur</option>
           <option value="Jimmy">Team Jimmy</option>
         </select>
@@ -935,3 +936,4 @@ function Onboarding({ onDone }: { onDone: (p: any) => void }) {
     </form>
   );
 }
+
