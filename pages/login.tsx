@@ -1,6 +1,6 @@
 // pages/login.tsx
 import Head from "next/head";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "../lib/supabaseClient";
 import { SITE_NAME } from "../utils/constants";
@@ -21,56 +21,87 @@ export default function Login() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // ensure we don't double-run auto sign-in
+  const autoTriedRef = useRef(false);
+
   const redirectOrigin = useMemo(() => {
     if (typeof window !== "undefined") return window.location.origin;
     return process.env.NEXT_PUBLIC_SITE_URL || "";
   }, []);
 
-  // Prefill from session (already signed in) or remembered creds (localStorage)
+  // Helper: persist or clear remembered creds
+  function persistRemember(e: string, p: string, auto: boolean) {
+    try {
+      if (remember && typeof window !== "undefined") {
+        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email: e, password: p, autoSignIn: auto }));
+      } else if (typeof window !== "undefined") {
+        localStorage.removeItem(REMEMBER_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Helper: direct sign-in with explicit creds (used by auto sign-in)
+  async function directSignIn(e: string, p: string) {
+    if (!e || !p) {
+      setErr("Saved credentials incomplete. Please sign in manually once.");
+      return;
+    }
+    setErr(null);
+    setMsg(null);
+    setBusy(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: e, password: p });
+    setBusy(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    if (data.session?.user) {
+      persistRemember(e, p, true);
+      router.replace(nextParam || "/");
+    }
+  }
+
+  // On mount: if already signed in, redirect; else load remembered creds and (optionally) auto sign-in
   useEffect(() => {
     (async () => {
+      // already signed in?
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
         router.replace(nextParam || "/");
         return;
       }
 
+      // load remembered
       try {
         const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
         if (raw) {
-          const saved = JSON.parse(raw) as RememberPayload;
-          if (saved.email) setEmail(saved.email);
-          if (saved.password) setPassword(saved.password);
-          if (saved.autoSignIn) {
-            setAutoSignIn(true);
-            setTimeout(() => {
-              if (saved.email && saved.password) {
-                void signInWithEmailPassword();
-              }
-            }, 200);
+          const saved = JSON.parse(raw) as RememberPayload | null;
+          if (saved?.email) setEmail(saved.email);
+          if (saved?.password) setPassword(saved.password);
+          if (saved?.autoSignIn) setAutoSignIn(true);
+
+          // IMPORTANT: Use saved values directly (not state) for auto sign-in
+          if (!autoTriedRef.current && saved?.autoSignIn && saved.email && saved.password) {
+            autoTriedRef.current = true;
+            // Small tick to let the UI paint first, then sign in with explicit values
+            setTimeout(() => directSignIn(saved.email, saved.password), 100);
           }
         }
       } catch {
-        // ignore
+        /* ignore */
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, nextParam]);
 
-  function persistRemember(e: string, p: string) {
-    try {
-      if (remember && typeof window !== "undefined") {
-        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email: e, password: p, autoSignIn }));
-      } else if (typeof window !== "undefined") {
-        localStorage.removeItem(REMEMBER_KEY);
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   async function signInWithEmailPassword(ev?: React.FormEvent) {
     ev?.preventDefault();
+    if (!email || !password) {
+      setErr("Please enter your email and password.");
+      return;
+    }
     setErr(null);
     setMsg(null);
     setBusy(true);
@@ -81,13 +112,17 @@ export default function Login() {
       return;
     }
     if (data.session?.user) {
-      persistRemember(email, password);
+      persistRemember(email, password, autoSignIn);
       router.replace(nextParam || "/");
     }
   }
 
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
+    if (!email) {
+      setErr("Enter your email first.");
+      return;
+    }
     setErr(null);
     setMsg(null);
     setBusy(true);
