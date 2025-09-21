@@ -41,25 +41,31 @@ export default function Login() {
 
   async function signInWithUsernamePassword(e: React.FormEvent) {
     e.preventDefault(); setErr(null); setMsg(null); setBusy(true);
-    // Resolve username -> email
+    const uname = username.trim().toLowerCase();
+  
+    // Look up the email by username (case-insensitive)
     const { data: prof, error: qErr } = await supabase
       .from("profiles")
-      .select("id, username")
-      .ilike("username", username)
+      .select("email")
+      .eq("username", uname)         // index on lower(username) makes this fast; we store username in lowercase
       .maybeSingle();
-    if (qErr || !prof) { setBusy(false); setErr("Username not found."); return; }
-    // We need user's email; fetch auth user by id via RPC is not available with anon key.
-    // Workaround: store email on sign-up (optional), or ask user for email if missing.
-    // Since everyone originally used email, we’ll just prompt for email if sign-in fails.
-    // Simpler: try email+password with the username as email fallback if they typed email.
-    const emailGuess = username.includes("@") ? username : email;
-    if (!emailGuess) { setBusy(false); setErr("Please enter your email in the Email+Password tab, or use your username here plus email below in case-insensitive match."); return; }
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email: emailGuess, password });
+  
+    if (qErr || !prof?.email) {
+      setBusy(false);
+      setErr("Username not found or not linked to an email. Try Email + Password, or set a username after you sign in.");
+      return;
+    }
+  
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: prof.email,
+      password
+    });
+  
     setBusy(false);
-    if (error) { setErr("Login failed. If you’re using a username, please also enter your email in the Email+Password tab, or use the 'Set password' tab to create one."); return; }
+    if (error) { setErr(error.message); return; }
     if (data.session?.user) router.replace(nextParam || "/");
   }
+
 
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault(); setErr(null); setMsg(null); setBusy(true);
