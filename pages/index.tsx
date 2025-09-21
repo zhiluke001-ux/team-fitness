@@ -501,8 +501,6 @@ export default function Home() {
       <Head><title>{SITE_NAME}</title><meta name="viewport" content="width=device-width, initial-scale=1" /></Head>
 
       {/* Top bar */}
-      // pages/index.tsx (header)
-{/* header */}
 <header className="topbar">
   <div className="container-app flex items-center justify-between py-3">
     <div className="flex items-center gap-3">
@@ -514,12 +512,6 @@ export default function Home() {
         alt="ATAG"
         className="h-6 w-auto object-contain shrink-0"
       />
-
-      {/* B) If your logo has thin edges on black, give it a white chip
-      <div className="h-7 rounded bg-white px-1 flex items-center">
-        <img src="/logo.png" alt="ATAG" className="h-5 w-auto object-contain" />
-      </div>
-      */}
 
       <span className="font-semibold tracking-tight">{SITE_NAME}</span>
     </div>
