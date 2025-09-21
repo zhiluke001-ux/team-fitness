@@ -502,15 +502,35 @@ export default function Home() {
 
       {/* Top bar */}
       // pages/index.tsx (header)
-      <header className="topbar">
-        <div className="container-app flex items-center justify-between py-3">
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="ATAG" className="h-7 w-auto object-contain" />
-            <span className="font-semibold tracking-tight">{SITE_NAME}</span>
-          </div>
-          {userId && <button className="btn btn-primary btn-compact" onClick={signOut}>Sign out</button>}
-        </div>
-      </header>
+{/* header */}
+<header className="topbar">
+  <div className="container-app flex items-center justify-between py-3">
+    <div className="flex items-center gap-3">
+      {/* Logo: keep only one of the two options below */}
+
+      {/* A) Plain logo (keeps aspect ratio, no squish) */}
+      <img
+        src="/logo.png"       // or /logo.svg
+        alt="ATAG"
+        className="h-6 w-auto object-contain shrink-0"
+      />
+
+      {/* B) If your logo has thin edges on black, give it a white chip
+      <div className="h-7 rounded bg-white px-1 flex items-center">
+        <img src="/logo.png" alt="ATAG" className="h-5 w-auto object-contain" />
+      </div>
+      */}
+
+      <span className="font-semibold tracking-tight">{SITE_NAME}</span>
+    </div>
+    {userId && (
+      <button className="btn btn-primary btn-compact" onClick={signOut}>
+        Sign out
+      </button>
+    )}
+  </div>
+</header>
+
 
 
       <main className="container-app py-5 sm:py-8">
