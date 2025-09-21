@@ -1,3 +1,4 @@
+// pages/login.tsx
 import Head from "next/head";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
@@ -18,7 +19,6 @@ export default function Login() {
   const [msg, setMsg] = useState<string|null>(null);
   const [err, setErr] = useState<string|null>(null);
 
-  // If already logged in, bounce to next
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -42,37 +42,36 @@ export default function Login() {
   async function signInWithUsernamePassword(e: React.FormEvent) {
     e.preventDefault(); setErr(null); setMsg(null); setBusy(true);
     const uname = username.trim().toLowerCase();
-  
-    // Look up the email by username (case-insensitive)
+
+    // Resolve username -> email (case-insensitive; we store lowercase)
     const { data: prof, error: qErr } = await supabase
       .from("profiles")
       .select("email")
-      .eq("username", uname)         // index on lower(username) makes this fast; we store username in lowercase
+      .eq("username", uname)
       .maybeSingle();
-  
+
     if (qErr || !prof?.email) {
       setBusy(false);
-      setErr("Username not found or not linked to an email. Try Email + Password, or set a username after you sign in.");
+      setErr("Username not found or not linked to an email. Try Email + Password or request a password setup link.");
       return;
     }
-  
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email: prof.email,
       password
     });
-  
+
     setBusy(false);
     if (error) { setErr(error.message); return; }
     if (data.session?.user) router.replace(nextParam || "/");
   }
-
 
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault(); setErr(null); setMsg(null); setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${redirectOrigin}/reset` });
     setBusy(false);
     if (error) { setErr(error.message); return; }
-    setMsg("We’ve sent you a secure link to set your password. Open it and set a new password, then return here to sign in.");
+    setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
   }
 
   return (
@@ -114,14 +113,14 @@ export default function Login() {
               </div>
               <button className="btn btn-primary btn-compact" type="submit" disabled={busy}>{busy?"Signing in…":"Sign in"}</button>
               {err && <p className="text-sm text-red-600">{err}</p>}
-              {!err && <p className="text-xs text-gray-600">Tip: If you see trouble, switch to Email+Password or use “Send password setup link”.</p>}
+              {!err && <p className="text-xs text-gray-600">Tip: Usernames are case-insensitive (stored lowercase).</p>}
             </form>
           )}
 
           {tab === "setup" && (
             <form onSubmit={sendPasswordSetup} className="grid grid-cols-1 gap-3">
               <p className="text-sm text-gray-700">
-                If you signed in before using a magic link, use this to create your password. We’ll email you a secure link.
+                If you used magic links before, request a password setup link here.
               </p>
               <div>
                 <label className="label">Email</label>
