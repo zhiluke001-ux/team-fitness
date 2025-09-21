@@ -460,6 +460,31 @@ export default function Home() {
     router.replace(`/login?next=${encodeURIComponent(next)}`);
   }
 
+  // Admin toggles: insert/delete a weekly team bonus and refresh UI
+  async function setToggle(team: TeamName, reason: string, desired: 0 | 1) {
+    if (!week) return;
+    const list = team === "Arthur" ? arthurBonuses : jimmyBonuses;
+    const has = list.some((b) => b.reason.startsWith(reason));
+
+    if (desired === 1 && !has) {
+      const { error } = await supabase
+        .from("team_bonuses")
+        .insert({ team, week, points: 200, reason, created_by: userId });
+      if (error) setError(error.message);
+    } else if (desired === 0 && has) {
+      const { error } = await supabase
+        .from("team_bonuses")
+        .delete()
+        .eq("team", team)
+        .eq("week", week)
+        .like("reason", `${reason}%`);
+      if (error) setError(error.message);
+    }
+
+    await fetchTeams(week);
+    await refreshAllTotals();
+  }
+
   if (loadingSession) {
     return (
       <>
@@ -488,7 +513,7 @@ export default function Home() {
 
       <main className="container-app py-5 sm:py-8">
         {!profile ? (
-          <div className="section max-w-lg">
+          <div className="card mb-6 max-w-lg">
             <h2 className="mb-2 text-lg font-semibold">Complete your profile</h2>
             <Onboarding onDone={(p) => setProfile(p)} />
           </div>
@@ -531,7 +556,7 @@ export default function Home() {
 
 
             {/* Your weekly entry */}
-            <div className="section">
+            <div className="card mb-6">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Your Weekly Entry</h2>
                 {!week && <span className="text-xs text-slate-500">Pick a week</span>}
@@ -582,9 +607,8 @@ export default function Home() {
                 onSetExercise={(d)=>setToggle("Jimmy", EXERCISE_REASON, d)}
               />
             </div>
-
             {/* Season totals */}
-            <div className="section">
+            <div className="card mb-6">
               <h2 className="mb-3 text-lg font-semibold">Season Total (All Weeks)</h2>
               <div className="grid-1-2 gap-6">
                 <SeasonPanelWithMembers title="Team Arthur" seasonData={arthurAll as SeasonData} rowsAllWeeks={arthurAllRows} />
