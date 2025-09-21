@@ -501,15 +501,17 @@ export default function Home() {
       <Head><title>{SITE_NAME}</title><meta name="viewport" content="width=device-width, initial-scale=1" /></Head>
 
       {/* Top bar */}
+      // pages/index.tsx (header)
       <header className="topbar">
         <div className="container-app flex items-center justify-between py-3">
           <div className="flex items-center gap-2">
-            <img src="/logo.webp" alt="ATAG" className="h-6 w-6" />
+            <img src="/logo.png" alt="ATAG" className="h-7 w-auto object-contain" />
             <span className="font-semibold tracking-tight">{SITE_NAME}</span>
           </div>
           {userId && <button className="btn btn-primary btn-compact" onClick={signOut}>Sign out</button>}
         </div>
       </header>
+
 
       <main className="container-app py-5 sm:py-8">
         {!profile ? (
