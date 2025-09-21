@@ -504,7 +504,7 @@ export default function Home() {
       <header className="topbar">
         <div className="container-app flex items-center justify-between py-3">
           <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded bg-brand-red" />
+            <img src="/logo.svg" alt="ATAG" className="h-6 w-6" />
             <span className="font-semibold tracking-tight">{SITE_NAME}</span>
           </div>
           {userId && <button className="btn btn-primary btn-compact" onClick={signOut}>Sign out</button>}
