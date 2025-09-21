@@ -63,7 +63,6 @@ export default function Login() {
     }
   }
 
-  // On mount: if already signed in, redirect; else load remembered creds and (optionally) auto sign-in
   useEffect(() => {
     (async () => {
       // already signed in?
@@ -72,29 +71,30 @@ export default function Login() {
         router.replace(nextParam || "/");
         return;
       }
-
-      // load remembered
-      try {
-        const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
-        if (raw) {
-          const saved = JSON.parse(raw) as RememberPayload | null;
-          if (saved?.email) setEmail(saved.email);
-          if (saved?.password) setPassword(saved.password);
-          if (saved?.autoSignIn) setAutoSignIn(true);
-
-          // IMPORTANT: Use saved values directly (not state) for auto sign-in
-          if (!autoTriedRef.current && saved?.autoSignIn && saved.email && saved.password) {
-            autoTriedRef.current = true;
-            // Small tick to let the UI paint first, then sign in with explicit values
-            setTimeout(() => directSignIn(saved.email, saved.password), 100);
-          }
+  
+      // If we just signed out, skip auto once
+      const skipAuto = typeof window !== "undefined" && sessionStorage.getItem("atag-skip-auto") === "1";
+      if (skipAuto && typeof window !== "undefined") {
+        sessionStorage.removeItem("atag-skip-auto");
+      }
+  
+      // load remembered creds
+      const raw = typeof window !== "undefined" ? localStorage.getItem("atag-remember-cred") : null;
+      if (raw) {
+        const saved = JSON.parse(raw) as { email?: string; password?: string; autoSignIn?: boolean } | null;
+        if (saved?.email) setEmail(saved.email);
+        if (saved?.password) setPassword(saved.password);
+  
+        // only auto if not skipping and flag is true
+        if (!skipAuto && saved?.autoSignIn && saved.email && saved.password && !autoTriedRef.current) {
+          autoTriedRef.current = true;
+          setTimeout(() => directSignIn(saved.email!, saved.password!), 100);
         }
-      } catch {
-        /* ignore */
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, nextParam]);
+
 
   async function signInWithEmailPassword(ev?: React.FormEvent) {
     ev?.preventDefault();
