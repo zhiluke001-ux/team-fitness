@@ -18,6 +18,7 @@ export interface Profile {
   team: TeamName;
   role?: "admin" | "member";
   username?: string | null; 
+  email?: string | null;  
 }
 
 export interface TeamBonus {
