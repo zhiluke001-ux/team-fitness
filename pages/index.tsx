@@ -460,10 +460,26 @@ export default function Home() {
   }
 
   async function signOut() {
+    // 1) Turn off autoSignIn but keep remembered creds
+    try {
+      const REMEMBER_KEY = "atag-remember-cred";
+      const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
+      if (raw) {
+        const saved = JSON.parse(raw);
+        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ ...saved, autoSignIn: false }));
+      }
+      // 2) One-time guard to skip auto on next visit
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("atag-skip-auto", "1");
+      }
+    } catch { /* ignore */ }
+  
+    // 3) Sign out and go to login
     await supabase.auth.signOut();
     const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
     router.replace(`/login?next=${encodeURIComponent(next)}`);
   }
+
 
   // Admin toggles
   const isAdmin = profile?.role === "admin";
