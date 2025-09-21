@@ -73,7 +73,10 @@ function Stat({ label, value }:{ label:string; value:string }) {
 
 function MembersTable({ rows }:{ rows: RecordRow[] }) {
   if (!rows?.length) return <p className="text-sm text-slate-600">No entries yet for this week.</p>;
-  const ordered = [...rows].sort((a,b)=>a.name.localeCompare(b.name));
+  // Sort by points DESC, then name ASC as a tiebreaker
+  const ordered = [...rows].sort(
+    (a, b) => memberPoints(b) - memberPoints(a) || a.name.localeCompare(b.name)
+  );
   return (
     <div className="table-wrap">
       <table className="table">
@@ -128,13 +131,20 @@ type SeasonData = {
 };
 
 function SeasonMembersTable({ rowsAllWeeks }:{ rowsAllWeeks: RecordRow[] }) {
-  const map = new Map<string, { user_id:string; name:string; km:number; calories:number; workouts:number; meals:number; points:number }>();
+const map = new Map<string, { user_id:string; name:string; km:number; calories:number; workouts:number; meals:number; points:number }>();
   for (const r of rowsAllWeeks) {
     const cur = map.get(r.user_id) || { user_id:r.user_id, name:r.name, km:0, calories:0, workouts:0, meals:0, points:0 };
-    cur.km += Number(r.km)||0; cur.calories += Number(r.calories)||0; cur.workouts += Number(r.workouts)||0; cur.meals += Number(r.meals)||0; cur.points += memberPoints(r);
+    cur.km += Number(r.km)||0;
+    cur.calories += Number(r.calories)||0;
+    cur.workouts += Number(r.workouts)||0;
+    cur.meals += Number(r.meals)||0;
+    cur.points += memberPoints(r);
     map.set(r.user_id, cur);
   }
-  const data = [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  // Sort by total points DESC, then name ASC
+  const data = [...map.values()].sort(
+    (a, b) => b.points - a.points || a.name.localeCompare(b.name)
+  );
 
   if (!data.length) return <p className="text-sm text-slate-600">No entries yet this season.</p>;
 
