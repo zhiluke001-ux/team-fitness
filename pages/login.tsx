@@ -95,7 +95,6 @@ export default function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, nextParam]);
 
-
   async function signInWithEmailPassword(ev?: React.FormEvent) {
     ev?.preventDefault();
     if (!email || !password) {
@@ -117,6 +116,22 @@ export default function Login() {
     }
   }
 
+  // Generate a random temporary password (for new users created via Forgot Password)
+  function genTempPassword() {
+    try {
+      // Use Web Crypto if available
+      const arr = new Uint8Array(16);
+      if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+        window.crypto.getRandomValues(arr);
+        return Array.from(arr)
+          .map(b => b.toString(16).padStart(2, "0"))
+          .join("");
+      }
+    } catch { /* noop */ }
+    // Fallback
+    return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  }
+
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
     if (!email) {
@@ -126,14 +141,37 @@ export default function Login() {
     setErr(null);
     setMsg(null);
     setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${redirectOrigin}/reset`,
+
+    const resetRedirect = `${redirectOrigin}/reset`;
+
+    // 1) Try regular reset for existing users
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: resetRedirect,
     });
-    setBusy(false);
-    if (error) {
-      setErr(error.message);
+
+    if (!resetErr) {
+      setBusy(false);
+      // Keep your original success copy
+      setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
       return;
     }
+
+    // 2) If reset failed (e.g., user doesn't exist), create the account and send confirmation link to /reset
+    const tempPassword = genTempPassword();
+    const { error: signUpErr } = await supabase.auth.signUp({
+      email,
+      password: tempPassword,
+      options: { emailRedirectTo: resetRedirect },
+    });
+
+    setBusy(false);
+    if (signUpErr) {
+      // Surface Supabase error (e.g., rate limits, email blocked, etc.)
+      setErr(signUpErr.message);
+      return;
+    }
+
+    // Same success message, unchanged
     setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
   }
 
