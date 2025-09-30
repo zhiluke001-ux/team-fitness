@@ -37,7 +37,7 @@ export default function Login() {
       } else if (typeof window !== "undefined") {
         localStorage.removeItem(REMEMBER_KEY);
       }
-    } catch {/* ignore */}
+    } catch { /* ignore */ }
   }
 
   // Helper: direct sign-in with explicit creds (used by auto sign-in)
@@ -129,10 +129,9 @@ export default function Login() {
     return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   }
 
-  // Forgot password flow:
-  // 1) Attempt reset for existing users.
-  // 2) If it fails (e.g., user doesn't exist), create the user (signUp) and send the same email flow,
-  //    so they click the email and land on /reset to set their real password.
+  // Forgot password flow (reliable with Supabase v2 behavior):
+  // 1) Try signUp first. If the user doesn't exist, this creates them and sends a confirmation email to /reset.
+  // 2) If signUp errors with "already registered", send resetPassword email to /reset.
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
     if (!email) {
@@ -144,37 +143,48 @@ export default function Login() {
     setBusy(true);
 
     const resetRedirect = `${redirectOrigin}/reset`;
-
-    // 1) Try regular reset for existing users
-    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: resetRedirect,
-    });
-
-    if (!resetErr) {
-      setBusy(false);
-      setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
-      return;
-    }
-
-    // 2) If reset failed: create user and send confirmation that lands on /reset
     const tempPassword = genTempPassword();
+
+    // 1) Try to create the user (this sends a confirmation email when email confirmations are enabled)
     const { error: signUpErr } = await supabase.auth.signUp({
       email,
       password: tempPassword,
       options: { emailRedirectTo: resetRedirect },
     });
 
-    setBusy(false);
-
-    if (signUpErr) {
-      // In rare cases "User already registered" could come back if the account exists but is in a state
-      // where reset was blocked. Try surfacing the error as-is to keep messages consistent.
-      setErr(signUpErr.message);
+    if (!signUpErr) {
+      setBusy(false);
+      // Keep your original success copy
+      setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
       return;
     }
 
-    // Keep your original success copy
-    setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
+    // If user already exists, fall back to password reset
+    const alreadyMsg = (signUpErr.message || "").toLowerCase();
+    const looksRegistered =
+      alreadyMsg.includes("already registered") ||
+      alreadyMsg.includes("already exists") ||
+      alreadyMsg.includes("user exists") ||
+      signUpErr?.status === 422;
+
+    if (looksRegistered) {
+      // 2) Existing user: send recovery link. Note: Supabase may return success regardless of existence.
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: resetRedirect,
+      });
+      setBusy(false);
+      if (resetErr) {
+        // If recovery fails for some odd state, surface it.
+        setErr(resetErr.message);
+        return;
+      }
+      setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
+      return;
+    }
+
+    // Any other sign-up error: show it
+    setBusy(false);
+    setErr(signUpErr.message);
   }
 
   return (
