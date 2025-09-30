@@ -37,9 +37,7 @@ export default function Login() {
       } else if (typeof window !== "undefined") {
         localStorage.removeItem(REMEMBER_KEY);
       }
-    } catch {
-      /* ignore */
-    }
+    } catch {/* ignore */}
   }
 
   // Helper: direct sign-in with explicit creds (used by auto sign-in)
@@ -71,20 +69,20 @@ export default function Login() {
         router.replace(nextParam || "/");
         return;
       }
-  
+
       // If we just signed out, skip auto once
       const skipAuto = typeof window !== "undefined" && sessionStorage.getItem("atag-skip-auto") === "1";
       if (skipAuto && typeof window !== "undefined") {
         sessionStorage.removeItem("atag-skip-auto");
       }
-  
+
       // load remembered creds
       const raw = typeof window !== "undefined" ? localStorage.getItem("atag-remember-cred") : null;
       if (raw) {
         const saved = JSON.parse(raw) as { email?: string; password?: string; autoSignIn?: boolean } | null;
         if (saved?.email) setEmail(saved.email);
         if (saved?.password) setPassword(saved.password);
-  
+
         // only auto if not skipping and flag is true
         if (!skipAuto && saved?.autoSignIn && saved.email && saved.password && !autoTriedRef.current) {
           autoTriedRef.current = true;
@@ -119,7 +117,6 @@ export default function Login() {
   // Generate a random temporary password (for new users created via Forgot Password)
   function genTempPassword() {
     try {
-      // Use Web Crypto if available
       const arr = new Uint8Array(16);
       if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
         window.crypto.getRandomValues(arr);
@@ -132,6 +129,10 @@ export default function Login() {
     return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   }
 
+  // Forgot password flow:
+  // 1) Attempt reset for existing users.
+  // 2) If it fails (e.g., user doesn't exist), create the user (signUp) and send the same email flow,
+  //    so they click the email and land on /reset to set their real password.
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
     if (!email) {
@@ -151,12 +152,11 @@ export default function Login() {
 
     if (!resetErr) {
       setBusy(false);
-      // Keep your original success copy
       setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
       return;
     }
 
-    // 2) If reset failed (e.g., user doesn't exist), create the account and send confirmation link to /reset
+    // 2) If reset failed: create user and send confirmation that lands on /reset
     const tempPassword = genTempPassword();
     const { error: signUpErr } = await supabase.auth.signUp({
       email,
@@ -165,13 +165,15 @@ export default function Login() {
     });
 
     setBusy(false);
+
     if (signUpErr) {
-      // Surface Supabase error (e.g., rate limits, email blocked, etc.)
+      // In rare cases "User already registered" could come back if the account exists but is in a state
+      // where reset was blocked. Try surfacing the error as-is to keep messages consistent.
       setErr(signUpErr.message);
       return;
     }
 
-    // Same success message, unchanged
+    // Keep your original success copy
     setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
   }
 
