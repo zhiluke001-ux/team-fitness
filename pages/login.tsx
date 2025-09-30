@@ -129,9 +129,10 @@ export default function Login() {
     return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   }
 
-  // Forgot password flow (reliable with Supabase v2 behavior):
-  // 1) Try signUp first. If the user doesn't exist, this creates them and sends a confirmation email to /reset.
-  // 2) If signUp errors with "already registered", send resetPassword email to /reset.
+  // Forgot password: robust dual-attempt strategy
+  // Step A: request a password reset (covers existing users — some envs always return success)
+  // Step B: try signUp with a temp password (covers new users); if "already registered", that's fine.
+  // We show success if either A or B succeeds; error only if both fail.
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
     if (!email) {
@@ -143,48 +144,60 @@ export default function Login() {
     setBusy(true);
 
     const resetRedirect = `${redirectOrigin}/reset`;
-    const tempPassword = genTempPassword();
 
-    // 1) Try to create the user (this sends a confirmation email when email confirmations are enabled)
-    const { error: signUpErr } = await supabase.auth.signUp({
-      email,
-      password: tempPassword,
-      options: { emailRedirectTo: resetRedirect },
-    });
+    // A) Try to send a recovery email for existing users
+    let resetOk = false;
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: resetRedirect,
+      });
+      // Supabase may not error even if user doesn't exist; treat absence of error as OK
+      if (!resetErr) resetOk = true;
+    } catch {
+      // ignore; we will try signUp next
+    }
 
-    if (!signUpErr) {
-      setBusy(false);
+    // B) Try to create the user (new users) which sends a confirmation email landing on /reset
+    let signupOk = false;
+    try {
+      const tempPassword = genTempPassword();
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email,
+        password: tempPassword,
+        options: { emailRedirectTo: resetRedirect },
+      });
+
+      if (!signUpErr) {
+        signupOk = true;
+      } else {
+        // If the user is already registered, that's okay — reset (A) should cover them.
+        const msg = (signUpErr.message || "").toLowerCase();
+        const already =
+          msg.includes("already registered") ||
+          msg.includes("already exists") ||
+          msg.includes("user exists") ||
+          signUpErr.status === 422;
+        if (already) {
+          signupOk = false; // but not a fatal failure
+        } else {
+          // Other signUp errors are unexpected; still don't fail yet if resetOk
+          // leave signupOk=false
+        }
+      }
+    } catch {
+      // ignore; still rely on resetOk
+    }
+
+    setBusy(false);
+
+    if (resetOk || signupOk) {
       // Keep your original success copy
       setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
       return;
     }
 
-    // If user already exists, fall back to password reset
-    const alreadyMsg = (signUpErr.message || "").toLowerCase();
-    const looksRegistered =
-      alreadyMsg.includes("already registered") ||
-      alreadyMsg.includes("already exists") ||
-      alreadyMsg.includes("user exists") ||
-      signUpErr?.status === 422;
-
-    if (looksRegistered) {
-      // 2) Existing user: send recovery link. Note: Supabase may return success regardless of existence.
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: resetRedirect,
-      });
-      setBusy(false);
-      if (resetErr) {
-        // If recovery fails for some odd state, surface it.
-        setErr(resetErr.message);
-        return;
-      }
-      setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
-      return;
-    }
-
-    // Any other sign-up error: show it
-    setBusy(false);
-    setErr(signUpErr.message);
+    // If we reach here, both attempts failed (usually misconfig or network)
+    setErr("We couldn't send the email. Please try again later.");
   }
 
   return (
