@@ -574,10 +574,10 @@ export default function Home() {
               ) : (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Field label="KM walked/run" value={myRecord.km} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, km:v}))} />
-                    <Field label="Calories burned" value={myRecord.calories} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, calories:v}))} />
+                    <Field label="KM walked/run" value={myRecord.km} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, km:v}))} />{*/}
+                    {/* <Field label="Calories burned" value={myRecord.calories} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, calories:v}))} />
                     <Field label="Workouts" value={myRecord.workouts} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, workouts:v}))} />
-                    <Field label="Healthy meals" value={myRecord.meals} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, meals:v}))} />
+                    {/* <Field label="Healthy meals" value={myRecord.meals} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, meals:v}))} /> */}
                   </div>
 
                   <div className="mt-4">
