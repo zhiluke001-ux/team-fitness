@@ -203,7 +203,7 @@ function SeasonPanelWithMembers({ title, seasonData, rowsAllWeeks }:{
       </div>
 
       {/* Hide season members table from UI */}
-      {/* <SeasonMembersTable rowsAllWeeks={rowsAllWeeks} /> */}
+      <SeasonMembersTable rowsAllWeeks={rowsAllWeeks} /> 
     </div>
   );
 }
@@ -274,7 +274,7 @@ function TeamPanel({
           </div>
 
           {/* Hide weekly members table from UI */}
-          {/* <MembersTable rows={rows} /> */}
+          <MembersTable rows={rows} /> 
         </>
       )}
     </div>
