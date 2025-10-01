@@ -21,7 +21,7 @@ const WEEKS_SAFE = Constants?.WEEKS ?? Array.from({ length: 24 }, (_, i) => i + 
 const POINTS_SAFE = Constants?.POINTS ?? {
   perKm: 10,
   per1000Calories: 100,
-  perWorkout: 20,
+  perWorkout: 10,
   perHealthyMeal: 20,
   bonusAllMinWorkouts: 200,
 };
@@ -554,7 +554,7 @@ export default function Home() {
                 <div className="mt-2 grid grid-cols-1 gap-1 text-[13px] text-slate-600">
                   <div>Every 1 km logged 10 pts</div>
                   {/* <div>Every 1,000 calories burned 100 pts</div> */}
-                  <div>Number of workout 20 pts</div>
+                  <div>Number of workout 10 pts</div>
                   {/* <div>No of healthy meal 20 pts</div> */}
                   <div>All members complete ≥ 2 workouts/week 200 pts</div>
                   <div className="border-t border-slate-100 pt-1" />
