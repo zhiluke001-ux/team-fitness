@@ -84,9 +84,9 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
           <tr className="text-slate-600">
             <th className="th">Member</th>
             <th className="th">KM</th>
-            <th className="th">Calories</th>
+            {/* <th className="th">Calories</th> */}
             <th className="th">Workouts</th>
-            <th className="th">Meals</th>
+            {/* <th className="th">Meals</th> */}
             <th className="th">Pts</th>
           </tr>
         </thead>
@@ -95,9 +95,9 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
             <tr key={`${r.user_id}-${r.week}`} className="border-t border-slate-100">
               <td className="td font-medium">{r.name}</td>
               <td className="td">{fmt2(Number(r.km||0))}</td>
-              <td className="td">{fmt2(Number(r.calories||0))}</td>
+              {/* <td className="td">{fmt2(Number(r.calories||0))}</td> */}
               <td className="td">{r.workouts}</td>
-              <td className="td">{r.meals}</td>
+              {/* <td className="td">{r.meals}</td> */}
               <td className="td">{fmt2(memberPoints(r))}</td>
             </tr>
           ))}
@@ -131,7 +131,7 @@ type SeasonData = {
 };
 
 function SeasonMembersTable({ rowsAllWeeks }:{ rowsAllWeeks: RecordRow[] }) {
-const map = new Map<string, { user_id:string; name:string; km:number; calories:number; workouts:number; meals:number; points:number }>();
+  const map = new Map<string, { user_id:string; name:string; km:number; calories:number; workouts:number; meals:number; points:number }>();
   for (const r of rowsAllWeeks) {
     const cur = map.get(r.user_id) || { user_id:r.user_id, name:r.name, km:0, calories:0, workouts:0, meals:0, points:0 };
     cur.km += Number(r.km)||0;
@@ -155,9 +155,9 @@ const map = new Map<string, { user_id:string; name:string; km:number; calories:n
           <tr className="text-slate-600">
             <th className="th">Member</th>
             <th className="th">KM (Total)</th>
-            <th className="th">Calories (Total)</th>
+            {/* <th className="th">Calories (Total)</th> */}
             <th className="th">Workouts</th>
-            <th className="th">Meals</th>
+            {/* <th className="th">Meals</th> */}
             <th className="th">Pts (Total)</th>
           </tr>
         </thead>
@@ -166,9 +166,9 @@ const map = new Map<string, { user_id:string; name:string; km:number; calories:n
             <tr key={r.user_id} className="border-t border-slate-100">
               <td className="td font-medium">{r.name}</td>
               <td className="td">{fmt2(r.km)}</td>
-              <td className="td">{fmt2(r.calories)}</td>
+              {/* <td className="td">{fmt2(r.calories)}</td> */}
               <td className="td">{r.workouts}</td>
-              <td className="td">{r.meals}</td>
+              {/* <td className="td">{r.meals}</td> */}
               <td className="td">{fmt2(r.points)}</td>
             </tr>
           ))}
@@ -191,9 +191,9 @@ function SeasonPanelWithMembers({ title, seasonData, rowsAllWeeks }:{
 
       <div className="grid-1-2-4 mb-4">
         <Stat label="KM Walked/Run (Total)" value={fmt2(totals.km)} />
-        <Stat label="Calories Burned (Total)" value={fmt2(totals.calories)} />
+        {/* <Stat label="Calories Burned (Total)" value={fmt2(totals.calories)} /> */}
         <Stat label="Number of Workouts" value={String(totals.workouts)} />
-        <Stat label="Number of Healthy Meals" value={String(totals.meals)} />
+        {/* <Stat label="Number of Healthy Meals" value={String(totals.meals)} /> */}
       </div>
 
       <div className="card mb-4 bg-brand-black text-white">
@@ -249,9 +249,9 @@ function TeamPanel({
 
           <div className="grid-1-2-4 mb-4">
             <Stat label="Total KM" value={fmt2(totals.km)} />
-            <Stat label="Total Calories" value={fmt2(totals.calories)} />
+            {/* <Stat label="Total Calories" value={fmt2(totals.calories)} /> */}
             <Stat label="Total Workouts" value={String(totals.workouts)} />
-            <Stat label="Total Healthy Meals" value={String(totals.meals)} />
+            {/* <Stat label="Total Healthy Meals" value={String(totals.meals)} /> */}
           </div>
 
           {anyWeeklyBonus && (
@@ -265,12 +265,11 @@ function TeamPanel({
             </div>
           )}
 
-        {/* Match Season black bar: full width */}
-        <div className="card mb-4 bg-brand-black text-white w-full">
-          <div className="text-sm opacity-90">Total team points this week</div>
-          <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
-        </div>
-
+          {/* Match Season black bar: full width */}
+          <div className="card mb-4 bg-brand-black text-white w-full">
+            <div className="text-sm opacity-90">Total team points this week</div>
+            <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
+          </div>
 
           <MembersTable rows={rows} />
         </>
@@ -552,9 +551,9 @@ export default function Home() {
                 <div className="text-sm font-medium">Scoring</div>
                 <div className="mt-2 grid grid-cols-1 gap-1 text-[13px] text-slate-600">
                   <div>Every 1 km logged 10 pts</div>
-                  <div>Every 1,000 calories burned 100 pts</div>
+                  {/* <div>Every 1,000 calories burned 100 pts</div> */}
                   <div>Number of workout 20 pts</div>
-                  <div>No of healthy meal 20 pts</div>
+                  {/* <div>No of healthy meal 20 pts</div> */}
                   <div>All members complete ≥ 2 workouts/week 200 pts</div>
                   <div className="border-t border-slate-100 pt-1" />
                   <div>Healthy Habits Bonus /week 200 pts</div>
@@ -563,8 +562,7 @@ export default function Home() {
               </div>
             </div>
 
-
-            {/* Your weekly entry */}
+            {/* Your weekly entry (left as-is so users can still input if needed) */}
             <div className="card mb-6">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Your Weekly Entry</h2>
