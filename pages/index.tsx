@@ -71,9 +71,9 @@ function Stat({ label, value }:{ label:string; value:string }) {
   );
 }
 
+/** Members table (columns for Calories & Meals commented; whole component can be left here for future use) */
 function MembersTable({ rows }:{ rows: RecordRow[] }) {
   if (!rows?.length) return <p className="text-sm text-slate-600">No entries yet for this week.</p>;
-  // Sort by points DESC, then name ASC as a tiebreaker
   const ordered = [...rows].sort(
     (a, b) => memberPoints(b) - memberPoints(a) || a.name.localeCompare(b.name)
   );
@@ -107,6 +107,7 @@ function MembersTable({ rows }:{ rows: RecordRow[] }) {
   );
 }
 
+/** Toggle row */
 function ToggleRow({
   label, value, onMinus, onPlus
 }:{ label: string; value: 0|1; onMinus: ()=>void; onPlus: ()=>void; }) {
@@ -130,6 +131,7 @@ type SeasonData = {
   totalPoints: number;
 };
 
+/** Season members table (Calories & Meals columns commented) */
 function SeasonMembersTable({ rowsAllWeeks }:{ rowsAllWeeks: RecordRow[] }) {
   const map = new Map<string, { user_id:string; name:string; km:number; calories:number; workouts:number; meals:number; points:number }>();
   for (const r of rowsAllWeeks) {
@@ -141,7 +143,6 @@ function SeasonMembersTable({ rowsAllWeeks }:{ rowsAllWeeks: RecordRow[] }) {
     cur.points += memberPoints(r);
     map.set(r.user_id, cur);
   }
-  // Sort by total points DESC, then name ASC
   const data = [...map.values()].sort(
     (a, b) => b.points - a.points || a.name.localeCompare(b.name)
   );
@@ -201,7 +202,8 @@ function SeasonPanelWithMembers({ title, seasonData, rowsAllWeeks }:{
         <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
       </div>
 
-      <SeasonMembersTable rowsAllWeeks={rowsAllWeeks} />
+      {/* Hide season members table from UI */}
+      {/* <SeasonMembersTable rowsAllWeeks={rowsAllWeeks} /> */}
     </div>
   );
 }
@@ -271,7 +273,8 @@ function TeamPanel({
             <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
           </div>
 
-          <MembersTable rows={rows} />
+          {/* Hide weekly members table from UI */}
+          {/* <MembersTable rows={rows} /> */}
         </>
       )}
     </div>
@@ -454,7 +457,6 @@ export default function Home() {
   }
 
   async function signOut() {
-    // disable auto sign-in (keep creds); skip next auto once
     try {
       const REMEMBER_KEY = "atag-remember-cred";
       const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
@@ -562,7 +564,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Your weekly entry (left as-is so users can still input if needed) */}
+            {/* Your weekly entry */}
             <div className="card mb-6">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Your Weekly Entry</h2>
@@ -574,8 +576,8 @@ export default function Home() {
               ) : (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Field label="KM walked/run" value={myRecord.km} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, km:v}))} />{*/}
-                    {/* <Field label="Calories burned" value={myRecord.calories} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, calories:v}))} />
+                    <Field label="KM walked/run" value={myRecord.km} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, km:v}))} />
+                    {/* <Field label="Calories burned" value={myRecord.calories} step={0.01} onChange={(v)=>setMyRecord(r=>r && ({...r, calories:v}))} /> */}
                     <Field label="Workouts" value={myRecord.workouts} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, workouts:v}))} />
                     {/* <Field label="Healthy meals" value={myRecord.meals} step={1} onChange={(v)=>setMyRecord(r=>r && ({...r, meals:v}))} /> */}
                   </div>
