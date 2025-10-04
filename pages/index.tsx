@@ -252,7 +252,56 @@ function SeasonPanelWithMembers({ title, seasonData, rowsAllWeeks }:{
   );
 }
 
-/* ---------------------- Monthly tables ---------------------- */
+/* ---------------------- Monthly calculator & tables ---------------------- */
+
+/** Compute month totals directly to avoid type/shape issues */
+function computeTeamMonthly(
+  roster: Profile[],
+  rowsAllWeeks: RecordRow[],
+  bonusesAllWeeks: TeamBonus[],
+  weeks: number[]
+): SeasonData {
+  const allowedWeeks = new Set(weeks.map(Number));
+
+  // Filter rows & bonuses to the month
+  const rows = rowsAllWeeks.filter(r => allowedWeeks.has(Number((r as any).week)));
+  const bons = bonusesAllWeeks.filter(b => allowedWeeks.has(Number((b as any).week)));
+
+  // Base member totals & points
+  let km = 0, calories = 0, workouts = 0, meals = 0, basePoints = 0;
+  for (const r of rows) {
+    km += Number(r.km) || 0;
+    calories += Number(r.calories) || 0;
+    workouts += Number(r.workouts) || 0;
+    meals += Number(r.meals) || 0;
+    basePoints += memberPoints(r) || 0;
+  }
+
+  // Weekly "all members >= 2 workouts" bonus
+  let weeksAll2Count = 0;
+  for (const w of allowedWeeks) {
+    const weekRows = rows.filter(r => Number(r.week) === w);
+    // Build a map of workouts by user for this week
+    const workoutsByUser = new Map<string, number>();
+    for (const r of weekRows) workoutsByUser.set(r.user_id, Number(r.workouts) || 0);
+
+    // Condition: every roster member appears and has >= 2 workouts
+    const allHave2 = roster.length > 0 && roster.every(p => (workoutsByUser.get(p.id) || 0) >= 2);
+    if (allHave2) weeksAll2Count += 1;
+  }
+  const all2Bonus = weeksAll2Count * POINTS_SAFE.bonusAllMinWorkouts;
+
+  // Manual team bonuses in that month (sum points)
+  const manualSum = bons.reduce((sum, b) => sum + (Number(b.points) || 0), 0);
+
+  const totalPoints = basePoints + all2Bonus + manualSum;
+
+  return {
+    totals: { km, calories, workouts, meals, basePoints },
+    bonuses: { weeksAll2Count, manualSum },
+    totalPoints,
+  };
+}
 
 function MonthlyMembersTable({ rowsAllWeeks, weeks }:{
   rowsAllWeeks: RecordRow[]; weeks: number[];
@@ -308,18 +357,12 @@ function MonthPanelWithMembers({
   bonusesAllWeeks: TeamBonus[];
   totalizerTitle?: string;
 }) {
-  const set = new Set(weeks.map(Number)); // ensure numeric keys
-  const rows = rowsAllWeeks.filter(r => set.has(Number((r as any).week)));
-  const bons = bonusesAllWeeks.filter(b => set.has(Number((b as any).week)));
-
-  // Reuse aggregator across filtered weeks
   const monthly = useMemo(
-    () => computeTeamAcrossWeeks(roster, rows, bons),
-    // it's okay that rows/bons are new arrays; computeTeamAcrossWeeks is pure
-    [roster, rows, bons]
+    () => computeTeamMonthly(roster, rowsAllWeeks, bonusesAllWeeks, weeks),
+    [roster, rowsAllWeeks, bonusesAllWeeks, weeks]
   );
 
-  const { totals, totalPoints } = monthly as SeasonData;
+  const { totals, totalPoints } = monthly;
 
   return (
     <div className="card">
