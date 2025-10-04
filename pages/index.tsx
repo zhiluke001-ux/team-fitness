@@ -40,6 +40,21 @@ const WEEK_DATES: Record<number, string> = {
 const weekLabel = (w: number) => `Week ${w} - ${WEEK_DATES[w] ?? ""}`;
 const fmt2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : "0.00");
 
+// legacy magic-link support (single definition!)
+function parseHashTokens(): { access_token?: string; refresh_token?: string; type?: string } {
+  if (typeof window === "undefined") return {};
+  const h = window.location.hash || "";
+  if (!h.includes("access_token")) return {};
+  const p = new URLSearchParams(h.replace(/^#/, ""));
+  return {
+    access_token: p.get("access_token") || undefined,
+    refresh_token: p.get("refresh_token") || undefined,
+    type: p.get("type") || undefined,
+  };
+}
+
+/* ------------------------- Month helpers ------------------------- */
+
 // Parse "DD/MM/YY" -> { y: 2025, m: 1..12, d: 1..31 }
 function parseDMY(dmy: string) {
   if (!dmy) return { y: 1970, m: 1, d: 1 };
@@ -48,7 +63,7 @@ function parseDMY(dmy: string) {
   return { y, m, d };
 }
 
-// Month key helpers
+// Month key from selected week
 function monthKeyFromWeek(week?: number | null): string | null {
   if (!week) return null;
   const dmy = WEEK_DATES[week];
@@ -57,13 +72,14 @@ function monthKeyFromWeek(week?: number | null): string | null {
   return `${y}-${String(m).padStart(2, "0")}`;
 }
 
+// Month labels
 const MONTH_LABELS: Record<string, string> = (() => {
   const months = [
     "January","February","March","April","May","June",
     "July","August","September","October","November","December"
   ];
   const out: Record<string, string> = {};
-  for (const [wkStr, dmy] of Object.entries(WEEK_DATES)) {
+  for (const [, dmy] of Object.entries(WEEK_DATES)) {
     const { y, m } = parseDMY(dmy);
     const key = `${y}-${String(m).padStart(2, "0")}`;
     if (!out[key]) out[key] = `${months[(m - 1) % 12]} ${y}`;
@@ -71,7 +87,7 @@ const MONTH_LABELS: Record<string, string> = (() => {
   return out;
 })();
 
-// Precompute: monthKey -> weeks belonging to that month (by start date)
+// Precompute monthKey -> weeks
 const MONTH_WEEKS: Record<string, number[]> = (() => {
   const map = new Map<string, number[]>();
   for (const [wkStr, dmy] of Object.entries(WEEK_DATES)) {
@@ -84,15 +100,6 @@ const MONTH_WEEKS: Record<string, number[]> = (() => {
   for (const [k, v] of map.entries()) obj[k] = v.sort((a,b)=>a-b);
   return obj;
 })();
-
-// legacy magic-link support
-function parseHashTokens(): { access_token?: string; refresh_token?: string; type?: string } {
-  if (typeof window === "undefined") return {};
-  const h = window.location.hash || "";
-  if (!h.includes("access_token")) return {};
-  const p = new URLSearchParams(h.replace(/^#/, ""));
-  return { access_token: p.get("access_token") || undefined, refresh_token: p.get("refresh_token") || undefined, type: p.get("type") || undefined };
-}
 
 /* ----------------- Small presentational components ----------------- */
 
@@ -302,7 +309,6 @@ function MonthlyMembersTable({ rowsAllWeeks, weeks }:{
   );
 }
 
-/** compute month totals from filtered rows/bonuses */
 function computeTeamMonthly(
   roster: Profile[],
   rowsAllWeeks: RecordRow[],
@@ -310,7 +316,6 @@ function computeTeamMonthly(
   weeks: number[]
 ): SeasonData {
   const allowedWeeks = new Set(weeks.map(Number));
-
   const rows = rowsAllWeeks.filter(r => allowedWeeks.has(Number((r as any).week)));
   const bons = bonusesAllWeeks.filter(b => allowedWeeks.has(Number((b as any).week)));
 
@@ -461,7 +466,6 @@ function TeamPanel({
             </div>
           )}
 
-          {/* Match Season black bar: full width */}
           <div className="card mb-4 bg-brand-black text-white w-full">
             <div className="text-sm opacity-90">Total team points this week</div>
             <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
@@ -529,8 +533,11 @@ export default function Home() {
       const { access_token, refresh_token } = parseHashTokens();
       if (access_token && refresh_token) {
         const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-        const url = new URL(window.location.href);
-        url.hash = ""; window.history.replaceState({}, "", url.toString());
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          url.hash = "";
+          window.history.replaceState({}, "", url.toString());
+        }
         if (error) console.error("setSession error", error);
       }
 
@@ -553,7 +560,7 @@ export default function Home() {
         router.replace(`/login?next=${encodeURIComponent(next)}`);
       }
     });
-    return () => sub.data.subscription.unsubscribe();
+    return () => sub.data.subscription?.unsubscribe();
   }, [router]);
 
   // Rosters
@@ -689,17 +696,6 @@ export default function Home() {
     await refreshAllTotals();
   }
 
-  if (loadingSession) {
-    return (
-      <>
-        <Head><title>{SITE_NAME}</title></Head>
-        <main className="min-h-screen grid place-items-center px-4">
-          <div className="card text-sm text-slate-700">Loading your session…</div>
-        </main>
-      </>
-    );
-  }
-
   // Month panel inputs (derived from selected week)
   const monthKey = monthKeyFromWeek(week);
   const monthWeeks = monthKey ? (MONTH_WEEKS[monthKey] ?? []) : [];
@@ -758,7 +754,7 @@ export default function Home() {
 
               <div className="card">
                 <div className="text-sm font-medium">Scoring</div>
-                <div className="mt-2 grid grid-cols-1 gap-1 text-[13px] text-slate-600">
+                <div className="mt-2 grid grid-cols-1 gap-1 text:[13px] text-slate-600">
                   <div>Every 1 km logged 10 pts</div>
                   {/* <div>Every 1,000 calories burned 100 pts</div> */}
                   <div>Number of workout 20 pts</div>
@@ -826,26 +822,24 @@ export default function Home() {
 
             {/* Month derived from selected week */}
             <div className="card mb-6">
-              <h2 className="mb-3 text-lg font-semibold">Month Summary {monthKey ? `— ${monthLabel}` : ""}</h2>
+              <h2 className="mb-3 text-lg font-semibold">
+                Month Summary {monthKey ? `— ${monthLabel}` : ""}
+              </h2>
               <div className="grid-1-2 gap-6">
-                <div className="card">
-                  <MonthPanelFromWeek
-                    title="Team Arthur"
-                    week={week}
-                    roster={arthurRoster}
-                    rowsAllWeeks={arthurAllRows}
-                    bonusesAllWeeks={arthurAllBonuses}
-                  />
-                </div>
-                <div className="card">
-                  <MonthPanelFromWeek
-                    title="Team Jimmy"
-                    week={week}
-                    roster={jimmyRoster}
-                    rowsAllWeeks={jimmyAllRows}
-                    bonusesAllWeeks={jimmyAllBonuses}
-                  />
-                </div>
+                <MonthPanelFromWeek
+                  title="Team Arthur"
+                  week={week}
+                  roster={arthurRoster}
+                  rowsAllWeeks={arthurAllRows}
+                  bonusesAllWeeks={arthurAllBonuses}
+                />
+                <MonthPanelFromWeek
+                  title="Team Jimmy"
+                  week={week}
+                  roster={jimmyRoster}
+                  rowsAllWeeks={jimmyAllRows}
+                  bonusesAllWeeks={jimmyAllBonuses}
+                />
               </div>
               {monthKey && (
                 <p className="mt-2 text-xs text-slate-500">
