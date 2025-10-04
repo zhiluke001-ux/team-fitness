@@ -29,25 +29,16 @@ const POINTS_SAFE = Constants?.POINTS ?? {
 const HABITS_REASON = "Healthy Habits Bonus /week";
 const EXERCISE_REASON = "Full Team Participation in an exercise";
 
+// Week start dates (DD/MM/YY)
 const WEEK_DATES: Record<number, string> = {
   1: "20/7/25", 2: "27/7/25", 3: "3/8/25", 4: "10/8/25", 5: "17/8/25", 6: "24/8/25",
   7: "31/8/25", 8: "7/9/25", 9: "14/9/25", 10: "21/9/25", 11: "28/9/25", 12: "5/10/25",
   13: "12/10/25", 14: "19/10/25", 15: "26/10/25", 16: "2/11/25", 17: "9/11/25", 18: "16/11/25",
   19: "23/11/25", 20: "30/11/25", 21: "7/12/25", 22: "14/12/25", 23: "21/12/25", 24: "28/12/25",
 };
+
 const weekLabel = (w: number) => `Week ${w} - ${WEEK_DATES[w] ?? ""}`;
 const fmt2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : "0.00");
-
-// legacy magic-link support
-function parseHashTokens(): { access_token?: string; refresh_token?: string; type?: string } {
-  if (typeof window === "undefined") return {};
-  const h = window.location.hash || "";
-  if (!h.includes("access_token")) return {};
-  const p = new URLSearchParams(h.replace(/^#/, ""));
-  return { access_token: p.get("access_token") || undefined, refresh_token: p.get("refresh_token") || undefined, type: p.get("type") || undefined };
-}
-
-/* ------------------------- Month helpers ------------------------- */
 
 // Parse "DD/MM/YY" -> { y: 2025, m: 1..12, d: 1..31 }
 function parseDMY(dmy: string) {
@@ -57,8 +48,31 @@ function parseDMY(dmy: string) {
   return { y, m, d };
 }
 
-// Build map: monthKey ("2025-07") => weeks [1,3,4...]
-const MONTH_WEEKS = (() => {
+// Month key helpers
+function monthKeyFromWeek(week?: number | null): string | null {
+  if (!week) return null;
+  const dmy = WEEK_DATES[week];
+  if (!dmy) return null;
+  const { y, m } = parseDMY(dmy);
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+const MONTH_LABELS: Record<string, string> = (() => {
+  const months = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December"
+  ];
+  const out: Record<string, string> = {};
+  for (const [wkStr, dmy] of Object.entries(WEEK_DATES)) {
+    const { y, m } = parseDMY(dmy);
+    const key = `${y}-${String(m).padStart(2, "0")}`;
+    if (!out[key]) out[key] = `${months[(m - 1) % 12]} ${y}`;
+  }
+  return out;
+})();
+
+// Precompute: monthKey -> weeks belonging to that month (by start date)
+const MONTH_WEEKS: Record<string, number[]> = (() => {
   const map = new Map<string, number[]>();
   for (const [wkStr, dmy] of Object.entries(WEEK_DATES)) {
     const w = Number(wkStr);
@@ -66,25 +80,19 @@ const MONTH_WEEKS = (() => {
     const key = `${y}-${String(m).padStart(2, "0")}`;
     map.set(key, [...(map.get(key) ?? []), w]);
   }
-  return map;
-})();
-
-// Human labels like "July 2025"
-const MONTH_LABELS: Record<string, string> = (() => {
-  const months = [
-    "January","February","March","April","May","June",
-    "July","August","September","October","November","December"
-  ];
-  const obj: Record<string, string> = {};
-  for (const key of MONTH_WEEKS.keys()) {
-    const [y, mm] = key.split("-").map(Number);
-    obj[key] = `${months[(mm - 1) % 12]} ${y}`;
-  }
+  const obj: Record<string, number[]> = {};
+  for (const [k, v] of map.entries()) obj[k] = v.sort((a,b)=>a-b);
   return obj;
 })();
 
-// Sorted month keys (chronological)
-const MONTH_KEYS = Array.from(MONTH_WEEKS.keys()).sort();
+// legacy magic-link support
+function parseHashTokens(): { access_token?: string; refresh_token?: string; type?: string } {
+  if (typeof window === "undefined") return {};
+  const h = window.location.hash || "";
+  if (!h.includes("access_token")) return {};
+  const p = new URLSearchParams(h.replace(/^#/, ""));
+  return { access_token: p.get("access_token") || undefined, refresh_token: p.get("refresh_token") || undefined, type: p.get("type") || undefined };
+}
 
 /* ----------------- Small presentational components ----------------- */
 
@@ -115,10 +123,9 @@ function Stat({ label, value }:{ label:string; value:string }) {
   );
 }
 
-/** Members table (Calories & Meals columns hidden) */
+/** Members table (Calories & Meals hidden in UI) */
 function MembersTable({ rows }:{ rows: RecordRow[] }) {
   if (!rows?.length) return <p className="text-sm text-slate-600">No entries yet for this week.</p>;
-  // Sort by points DESC, then name ASC
   const ordered = [...rows].sort(
     (a, b) => memberPoints(b) - memberPoints(a) || a.name.localeCompare(b.name)
   );
@@ -175,7 +182,7 @@ type SeasonData = {
   totalPoints: number;
 };
 
-/** Season members table (Calories & Meals columns hidden) */
+/** Season members table (Calories & Meals hidden in UI) */
 function SeasonMembersTable({ rowsAllWeeks }:{ rowsAllWeeks: RecordRow[] }) {
   const map = new Map<string, { user_id:string; name:string; km:number; calories:number; workouts:number; meals:number; points:number }>();
   for (const r of rowsAllWeeks) {
@@ -187,11 +194,9 @@ function SeasonMembersTable({ rowsAllWeeks }:{ rowsAllWeeks: RecordRow[] }) {
     cur.points += memberPoints(r);
     map.set(r.user_id, cur);
   }
-  // Sort by total points DESC, then name ASC
   const data = [...map.values()].sort(
     (a, b) => b.points - a.points || a.name.localeCompare(b.name)
   );
-
   if (!data.length) return <p className="text-sm text-slate-600">No entries yet this season.</p>;
 
   return (
@@ -252,61 +257,12 @@ function SeasonPanelWithMembers({ title, seasonData, rowsAllWeeks }:{
   );
 }
 
-/* ---------------------- Monthly calculator & tables ---------------------- */
-
-/** Compute month totals directly to avoid type/shape issues */
-function computeTeamMonthly(
-  roster: Profile[],
-  rowsAllWeeks: RecordRow[],
-  bonusesAllWeeks: TeamBonus[],
-  weeks: number[]
-): SeasonData {
-  const allowedWeeks = new Set(weeks.map(Number));
-
-  // Filter rows & bonuses to the month
-  const rows = rowsAllWeeks.filter(r => allowedWeeks.has(Number((r as any).week)));
-  const bons = bonusesAllWeeks.filter(b => allowedWeeks.has(Number((b as any).week)));
-
-  // Base member totals & points
-  let km = 0, calories = 0, workouts = 0, meals = 0, basePoints = 0;
-  for (const r of rows) {
-    km += Number(r.km) || 0;
-    calories += Number(r.calories) || 0;
-    workouts += Number(r.workouts) || 0;
-    meals += Number(r.meals) || 0;
-    basePoints += memberPoints(r) || 0;
-  }
-
-  // Weekly "all members >= 2 workouts" bonus
-  let weeksAll2Count = 0;
-  for (const w of allowedWeeks) {
-    const weekRows = rows.filter(r => Number(r.week) === w);
-    // Build a map of workouts by user for this week
-    const workoutsByUser = new Map<string, number>();
-    for (const r of weekRows) workoutsByUser.set(r.user_id, Number(r.workouts) || 0);
-
-    // Condition: every roster member appears and has >= 2 workouts
-    const allHave2 = roster.length > 0 && roster.every(p => (workoutsByUser.get(p.id) || 0) >= 2);
-    if (allHave2) weeksAll2Count += 1;
-  }
-  const all2Bonus = weeksAll2Count * POINTS_SAFE.bonusAllMinWorkouts;
-
-  // Manual team bonuses in that month (sum points)
-  const manualSum = bons.reduce((sum, b) => sum + (Number(b.points) || 0), 0);
-
-  const totalPoints = basePoints + all2Bonus + manualSum;
-
-  return {
-    totals: { km, calories, workouts, meals, basePoints },
-    bonuses: { weeksAll2Count, manualSum },
-    totalPoints,
-  };
-}
+/* ---------------------- Month (derived from selected Week) ---------------------- */
 
 function MonthlyMembersTable({ rowsAllWeeks, weeks }:{
   rowsAllWeeks: RecordRow[]; weeks: number[];
 }) {
-  const set = new Set(weeks.map(Number)); // ensure numeric keys
+  const set = new Set(weeks.map(Number));
   const rows = rowsAllWeeks.filter(r => set.has(Number((r as any).week)));
 
   const map = new Map<string, { user_id:string; name:string; km:number; workouts:number; points:number }>();
@@ -346,28 +302,86 @@ function MonthlyMembersTable({ rowsAllWeeks, weeks }:{
   );
 }
 
-function MonthPanelWithMembers({
-  title, monthKey, weeks, roster, rowsAllWeeks, bonusesAllWeeks, totalizerTitle = "Total team points (Month)"
+/** compute month totals from filtered rows/bonuses */
+function computeTeamMonthly(
+  roster: Profile[],
+  rowsAllWeeks: RecordRow[],
+  bonusesAllWeeks: TeamBonus[],
+  weeks: number[]
+): SeasonData {
+  const allowedWeeks = new Set(weeks.map(Number));
+
+  const rows = rowsAllWeeks.filter(r => allowedWeeks.has(Number((r as any).week)));
+  const bons = bonusesAllWeeks.filter(b => allowedWeeks.has(Number((b as any).week)));
+
+  let km = 0, calories = 0, workouts = 0, meals = 0, basePoints = 0;
+  for (const r of rows) {
+    km += Number(r.km) || 0;
+    calories += Number(r.calories) || 0;
+    workouts += Number(r.workouts) || 0;
+    meals += Number(r.meals) || 0;
+    basePoints += memberPoints(r) || 0;
+  }
+
+  // Weekly "all members ≥ 2 workouts" bonus
+  let weeksAll2Count = 0;
+  for (const w of allowedWeeks) {
+    const weekRows = rows.filter(r => Number(r.week) === w);
+    const workoutsByUser = new Map<string, number>();
+    for (const r of weekRows) workoutsByUser.set(r.user_id, Number(r.workouts) || 0);
+    const allHave2 = roster.length > 0 && roster.every(p => (workoutsByUser.get(p.id) || 0) >= 2);
+    if (allHave2) weeksAll2Count += 1;
+  }
+  const all2Bonus = weeksAll2Count * POINTS_SAFE.bonusAllMinWorkouts;
+
+  // Manual bonuses for those weeks
+  const manualSum = bons.reduce((sum, b) => sum + (Number(b.points) || 0), 0);
+
+  const totalPoints = basePoints + all2Bonus + manualSum;
+
+  return {
+    totals: { km, calories, workouts, meals, basePoints },
+    bonuses: { weeksAll2Count, manualSum },
+    totalPoints,
+  };
+}
+
+function MonthPanelFromWeek({
+  title,
+  week,
+  roster,
+  rowsAllWeeks,
+  bonusesAllWeeks,
 }:{
   title:string;
-  monthKey:string;
-  weeks:number[];
+  week: number | null;
   roster: Profile[];
   rowsAllWeeks: RecordRow[];
   bonusesAllWeeks: TeamBonus[];
-  totalizerTitle?: string;
 }) {
-  const monthly = useMemo(
-    () => computeTeamMonthly(roster, rowsAllWeeks, bonusesAllWeeks, weeks),
-    [roster, rowsAllWeeks, bonusesAllWeeks, weeks]
-  );
+  if (!week) {
+    return (
+      <div className="card">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-lg font-semibold">{title}</div>
+          <span className="badge">Month</span>
+        </div>
+        <p className="text-sm text-slate-600">Pick a week to see its month summary.</p>
+      </div>
+    );
+  }
 
+  const key = monthKeyFromWeek(week)!;
+  const monthWeeks = MONTH_WEEKS[key] ?? [];
+  const monthLabel = MONTH_LABELS[key] ?? key;
+
+  const monthly = computeTeamMonthly(roster, rowsAllWeeks, bonusesAllWeeks, monthWeeks);
   const { totals, totalPoints } = monthly;
 
   return (
     <div className="card">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-lg font-semibold">{title} — {MONTH_LABELS[monthKey]}</div>
+        <div className="text-lg font-semibold">{title} — {monthLabel}</div>
         <span className="badge">Month</span>
       </div>
 
@@ -379,11 +393,11 @@ function MonthPanelWithMembers({
       </div>
 
       <div className="card mb-4 bg-brand-black text-white">
-        <div className="text-sm opacity-90">{totalizerTitle}</div>
+        <div className="text-sm opacity-90">Total team points (Month)</div>
         <div className="mt-1 text-3xl font-bold">{fmt2(totalPoints)}</div>
       </div>
 
-      <MonthlyMembersTable rowsAllWeeks={rowsAllWeeks} weeks={weeks} />
+      <MonthlyMembersTable rowsAllWeeks={rowsAllWeeks} weeks={monthWeeks} />
     </div>
   );
 }
@@ -470,7 +484,6 @@ export default function Home() {
   const [loadingSession, setLoadingSession] = useState(true);
 
   const [week, setWeek] = useState<number | null>(null);
-  const [monthKey, setMonthKey] = useState<string>(MONTH_KEYS[0] ?? "");
   const [error, setError] = useState<string>();
   const [myRecord, setMyRecord] = useState<RecordRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -507,16 +520,6 @@ export default function Home() {
     if (!week && q) {
       const { week: _omit, ...rest } = router.query;
       router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
-    }
-
-    // Optional: when week changes, auto-select matching month
-    if (week) {
-      const dmy = WEEK_DATES[week];
-      if (dmy) {
-        const { y, m } = parseDMY(dmy);
-        const key = `${y}-${String(m).padStart(2, "0")}`;
-        if (MONTH_WEEKS.has(key)) setMonthKey(key);
-      }
     }
   }, [week, router]);
 
@@ -627,7 +630,7 @@ export default function Home() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // Aggregates
+  // Aggregates (weekly & season)
   const myPointsRaw = useMemo(()=> (myRecord ? memberPoints(myRecord) : 0), [myRecord]);
   const arthurWeek = useMemo(()=> computeTeam(arthurRoster, arthurRows, arthurBonuses), [arthurRows, arthurRoster, arthurBonuses]);
   const jimmyWeek  = useMemo(()=> computeTeam(jimmyRoster, jimmyRows, jimmyBonuses), [jimmyRows, jimmyRoster, jimmyBonuses]);
@@ -697,6 +700,20 @@ export default function Home() {
     );
   }
 
+  // Month panel inputs (derived from selected week)
+  const monthKey = monthKeyFromWeek(week);
+  const monthWeeks = monthKey ? (MONTH_WEEKS[monthKey] ?? []) : [];
+  const monthLabel = monthKey ? (MONTH_LABELS[monthKey] ?? monthKey) : "";
+
+  const arthurMonth = useMemo(
+    () => monthKey ? computeTeamMonthly(arthurRoster, arthurAllRows, arthurAllBonuses, monthWeeks) : null,
+    [monthKey, arthurRoster, arthurAllRows, arthurAllBonuses, monthWeeks]
+  );
+  const jimmyMonth = useMemo(
+    () => monthKey ? computeTeamMonthly(jimmyRoster, jimmyAllRows, jimmyAllBonuses, monthWeeks) : null,
+    [monthKey, jimmyRoster, jimmyAllRows, jimmyAllBonuses, monthWeeks]
+  );
+
   return (
     <>
       <Head><title>{SITE_NAME}</title><meta name="viewport" content="width=device-width, initial-scale=1" /></Head>
@@ -721,7 +738,7 @@ export default function Home() {
         ) : (
           <>
             {/* Top summary row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="card">
                 <div className="text-xs text-slate-500">You are</div>
                 <div className="text-lg font-semibold">{profile.name}</div>
@@ -751,19 +768,6 @@ export default function Home() {
                   <div>Healthy Habits Bonus /week 200 pts</div>
                   <div>Full Team Participation in an exercise 200 pts</div>
                 </div>
-              </div>
-
-              {/* Month picker */}
-              <div className="card">
-                <label className="label">Month</label>
-                <select className="input" value={monthKey} onChange={(e)=>setMonthKey(e.target.value)}>
-                  {MONTH_KEYS.map(k => (
-                    <option key={k} value={k}>{MONTH_LABELS[k]}</option>
-                  ))}
-                </select>
-                <p className="mt-2 text-xs text-slate-500">
-                  Weeks in month: {(MONTH_WEEKS[monthKey] ?? []).join(", ")}
-                </p>
               </div>
             </div>
 
@@ -820,29 +824,36 @@ export default function Home() {
               />
             </div>
 
-            {/* Monthly totals */}
+            {/* Month derived from selected week */}
             <div className="card mb-6">
-              <h2 className="mb-3 text-lg font-semibold">Monthly View</h2>
+              <h2 className="mb-3 text-lg font-semibold">Month Summary {monthKey ? `— ${monthLabel}` : ""}</h2>
               <div className="grid-1-2 gap-6">
-                <MonthPanelWithMembers
-                  title="Team Arthur"
-                  monthKey={monthKey}
-                  weeks={MONTH_WEEKS[monthKey] ?? []}
-                  roster={arthurRoster}
-                  rowsAllWeeks={arthurAllRows}
-                  bonusesAllWeeks={arthurAllBonuses}
-                />
-                <MonthPanelWithMembers
-                  title="Team Jimmy"
-                  monthKey={monthKey}
-                  weeks={MONTH_WEEKS[monthKey] ?? []}
-                  roster={jimmyRoster}
-                  rowsAllWeeks={jimmyAllRows}
-                  bonusesAllWeeks={jimmyAllBonuses}
-                />
+                <div className="card">
+                  <MonthPanelFromWeek
+                    title="Team Arthur"
+                    week={week}
+                    roster={arthurRoster}
+                    rowsAllWeeks={arthurAllRows}
+                    bonusesAllWeeks={arthurAllBonuses}
+                  />
+                </div>
+                <div className="card">
+                  <MonthPanelFromWeek
+                    title="Team Jimmy"
+                    week={week}
+                    roster={jimmyRoster}
+                    rowsAllWeeks={jimmyAllRows}
+                    bonusesAllWeeks={jimmyAllBonuses}
+                  />
+                </div>
               </div>
+              {monthKey && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Weeks in {monthLabel}: {(MONTH_WEEKS[monthKey] ?? []).join(", ")}
+                </p>
+              )}
             </div>
-            
+
             {/* Season totals */}
             <div className="card mb-6">
               <h2 className="mb-3 text-lg font-semibold">Season Total (All Weeks)</h2>
