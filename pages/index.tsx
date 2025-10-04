@@ -257,8 +257,8 @@ function SeasonPanelWithMembers({ title, seasonData, rowsAllWeeks }:{
 function MonthlyMembersTable({ rowsAllWeeks, weeks }:{
   rowsAllWeeks: RecordRow[]; weeks: number[];
 }) {
-  const set = new Set(weeks);
-  const rows = rowsAllWeeks.filter(r => set.has(r.week));
+  const set = new Set(weeks.map(Number)); // ensure numeric keys
+  const rows = rowsAllWeeks.filter(r => set.has(Number((r as any).week)));
 
   const map = new Map<string, { user_id:string; name:string; km:number; workouts:number; points:number }>();
   for (const r of rows) {
@@ -308,13 +308,14 @@ function MonthPanelWithMembers({
   bonusesAllWeeks: TeamBonus[];
   totalizerTitle?: string;
 }) {
-  const set = new Set(weeks);
-  const rows = rowsAllWeeks.filter(r => set.has(r.week));
-  const bons = bonusesAllWeeks.filter(b => set.has(b.week));
+  const set = new Set(weeks.map(Number)); // ensure numeric keys
+  const rows = rowsAllWeeks.filter(r => set.has(Number((r as any).week)));
+  const bons = bonusesAllWeeks.filter(b => set.has(Number((b as any).week)));
 
   // Reuse aggregator across filtered weeks
   const monthly = useMemo(
     () => computeTeamAcrossWeeks(roster, rows, bons),
+    // it's okay that rows/bons are new arrays; computeTeamAcrossWeeks is pure
     [roster, rows, bons]
   );
 
