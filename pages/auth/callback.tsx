@@ -8,12 +8,21 @@ export default function AuthCallback() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    async function run() {
+    (async () => {
       try {
         const url = new URL(window.location.href);
         const next = url.searchParams.get("next") ?? "/";
 
-        // PKCE token_hash flow
+        // 1) New PKCE code flow (?code=...)
+        const code = url.searchParams.get("code");
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          router.replace(next);
+          return;
+        }
+
+        // 2) PKCE token_hash flow (?token_hash=...&type=...)
         const token_hash = url.searchParams.get("token_hash");
         const type = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
         if (token_hash && type) {
@@ -23,29 +32,26 @@ export default function AuthCallback() {
           return;
         }
 
-        // Implicit hash flow (#access_token)
+        // 3) Legacy implicit hash flow (#access_token=...&refresh_token=...)
         if (window.location.hash) {
           const params = new URLSearchParams(window.location.hash.substring(1));
           const access_token = params.get("access_token");
           const refresh_token = params.get("refresh_token");
           if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({
-              access_token,
-              refresh_token
-            });
+            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
             if (error) throw error;
             router.replace(next);
             return;
           }
         }
 
+        // If none matched, it's not a valid link
         router.replace("/login?msg=invalid_link");
       } catch (e: any) {
         console.error(e);
         setErr(e?.message ?? "Unexpected error");
       }
-    }
-    run();
+    })();
   }, [router]);
 
   return (
