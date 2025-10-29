@@ -13,43 +13,51 @@ export default function AuthCallback() {
         const url = new URL(window.location.href);
         const next = url.searchParams.get("next") ?? "/";
 
-        // 1) New PKCE code flow (?code=...)
         const code = url.searchParams.get("code");
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          router.replace(next);
-          return;
-        }
-
-        // 2) PKCE token_hash flow (?token_hash=...&type=...)
         const token_hash = url.searchParams.get("token_hash");
         const type = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
-        if (token_hash && type) {
-          const { error } = await supabase.auth.verifyOtp({ type, token_hash });
-          if (error) throw error;
-          router.replace(next);
-          return;
+
+        let ok = false;
+
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error) ok = true;
+          else if (token_hash && type) {
+            const { error: vErr } = await supabase.auth.verifyOtp({ type, token_hash });
+            if (!vErr) ok = true;
+            else throw error;
+          } else {
+            throw error;
+          }
         }
 
-        // 3) Legacy implicit hash flow (#access_token=...&refresh_token=...)
-        if (window.location.hash) {
+        if (!ok && token_hash && type) {
+          const { error } = await supabase.auth.verifyOtp({ type, token_hash });
+          if (!error) ok = true;
+        }
+
+        if (!ok && window.location.hash) {
           const params = new URLSearchParams(window.location.hash.substring(1));
           const access_token = params.get("access_token");
           const refresh_token = params.get("refresh_token");
           if (access_token && refresh_token) {
             const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-            if (error) throw error;
-            router.replace(next);
-            return;
+            if (!error) ok = true;
           }
         }
 
-        // If none matched, it's not a valid link
-        router.replace("/login?msg=invalid_link");
+        if (ok) {
+          router.replace(next);
+        } else {
+          router.replace("/login?msg=invalid_link");
+        }
       } catch (e: any) {
         console.error(e);
-        setErr(e?.message ?? "Unexpected error");
+        setErr(
+          e?.message?.includes("code challenge")
+            ? "This link was opened in a different browser or the request expired. Please try again from the same browser."
+            : e?.message ?? "Unexpected error"
+        );
       }
     })();
   }, [router]);
