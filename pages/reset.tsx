@@ -13,13 +13,13 @@ export default function Reset() {
   const [confirm, setConfirm] = useState("");
 
   useEffect(() => {
-    let unsub: { unsubscribe: () => void } | undefined;
+    // Keep just the subscription object for proper cleanup
+    let subscription: { unsubscribe: () => void } | null = null;
 
     async function init() {
       try {
         const href = typeof window !== "undefined" ? window.location.href : "";
-        const url = new URL(href);
-        const code = url.searchParams.get("code");
+        const code = href ? new URL(href).searchParams.get("code") : null;
 
         // --- PKCE flow: exchange ?code= for a session
         if (code) {
@@ -40,14 +40,15 @@ export default function Reset() {
           return;
         }
 
-        const listener = supabase.auth.onAuthStateChange((event) => {
+        // Note: onAuthStateChange returns { data: { subscription } }
+        const { data } = supabase.auth.onAuthStateChange((event) => {
           if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
             setStage("ready");
           }
         });
-        unsub = listener.data;
+        subscription = data.subscription;
 
-        // Give the SDK a moment to parse the hash (if any)
+        // Give the SDK a moment to parse any hash fragment
         setTimeout(async () => {
           const { data: again } = await supabase.auth.getSession();
           if (!again.session?.user) setStage("error");
@@ -60,7 +61,7 @@ export default function Reset() {
 
     init();
     return () => {
-      try { unsub?.unsubscribe?.(); } catch {}
+      try { subscription?.unsubscribe(); } catch {}
     };
   }, []);
 
@@ -74,7 +75,6 @@ export default function Reset() {
     if (error) { setError(error.message); setStage("error"); return; }
 
     setStage("done");
-    // Optional: small delay then go home
     setTimeout(() => router.replace("/"), 800);
   }
 
