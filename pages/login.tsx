@@ -33,11 +33,14 @@ export default function Login() {
   function persistRemember(e: string, p: string, auto: boolean) {
     try {
       if (remember && typeof window !== "undefined") {
-        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email: e, password: p, autoSignIn: auto }));
+        const payload: RememberPayload = { email: e, password: p, autoSignIn: auto };
+        localStorage.setItem(REMEMBER_KEY, JSON.stringify(payload));
       } else if (typeof window !== "undefined") {
         localStorage.removeItem(REMEMBER_KEY);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // Helper: direct sign-in with explicit creds (used by auto sign-in)
@@ -77,9 +80,9 @@ export default function Login() {
       }
 
       // load remembered creds
-      const raw = typeof window !== "undefined" ? localStorage.getItem("atag-remember-cred") : null;
+      const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
       if (raw) {
-        const saved = JSON.parse(raw) as { email?: string; password?: string; autoSignIn?: boolean } | null;
+        const saved = JSON.parse(raw) as RememberPayload | null;
         if (saved?.email) setEmail(saved.email);
         if (saved?.password) setPassword(saved.password);
 
@@ -114,25 +117,8 @@ export default function Login() {
     }
   }
 
-  // Generate a random temporary password (for new users created via Forgot Password)
-  function genTempPassword() {
-    try {
-      const arr = new Uint8Array(16);
-      if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
-        window.crypto.getRandomValues(arr);
-        return Array.from(arr)
-          .map(b => b.toString(16).padStart(2, "0"))
-          .join("");
-      }
-    } catch { /* noop */ }
-    // Fallback
-    return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-  }
-
-  // Forgot password: robust dual-attempt strategy
-  // Step A: request a password reset (covers existing users — some envs always return success)
-  // Step B: try signUp with a temp password (covers new users); if "already registered", that's fine.
-  // We show success if either A or B succeeds; error only if both fail.
+  // Forgot password — send a **recovery** link only (no signUp fallback).
+  // This prevents PKCE "code challenge does not match" issues.
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
     if (!email) {
@@ -143,61 +129,19 @@ export default function Login() {
     setMsg(null);
     setBusy(true);
 
-    const resetRedirect = `${redirectOrigin}/reset`;
-
-    // A) Try to send a recovery email for existing users
-    let resetOk = false;
     try {
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+      const resetRedirect = `${redirectOrigin}/reset`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: resetRedirect,
       });
-      // Supabase may not error even if user doesn't exist; treat absence of error as OK
-      if (!resetErr) resetOk = true;
-    } catch {
-      // ignore; we will try signUp next
+      if (error) throw error;
+
+      setMsg("We’ve emailed you a secure link to set your password. Open it in this same browser.");
+    } catch (ex: any) {
+      setErr(ex?.message || "We couldn't send the email. Please try again later.");
+    } finally {
+      setBusy(false);
     }
-
-    // B) Try to create the user (new users) which sends a confirmation email landing on /reset
-    let signupOk = false;
-    try {
-      const tempPassword = genTempPassword();
-      const { error: signUpErr } = await supabase.auth.signUp({
-        email,
-        password: tempPassword,
-        options: { emailRedirectTo: resetRedirect },
-      });
-
-      if (!signUpErr) {
-        signupOk = true;
-      } else {
-        // If the user is already registered, that's okay — reset (A) should cover them.
-        const msg = (signUpErr.message || "").toLowerCase();
-        const already =
-          msg.includes("already registered") ||
-          msg.includes("already exists") ||
-          msg.includes("user exists") ||
-          signUpErr.status === 422;
-        if (already) {
-          signupOk = false; // but not a fatal failure
-        } else {
-          // Other signUp errors are unexpected; still don't fail yet if resetOk
-          // leave signupOk=false
-        }
-      }
-    } catch {
-      // ignore; still rely on resetOk
-    }
-
-    setBusy(false);
-
-    if (resetOk || signupOk) {
-      // Keep your original success copy
-      setMsg("We’ve emailed you a secure link to set your password. Open it, set a password, then sign in.");
-      return;
-    }
-
-    // If we reach here, both attempts failed (usually misconfig or network)
-    setErr("We couldn't send the email. Please try again later.");
   }
 
   return (
@@ -261,7 +205,13 @@ export default function Login() {
             </button>
 
             <div className="flex items-center justify-between">
-              <button className="btn btn-compact" onClick={sendPasswordSetup} disabled={!email || busy} type="button">
+              <button
+                className="btn btn-compact"
+                onClick={sendPasswordSetup}
+                disabled={!email || busy}
+                type="button"
+                title="Send a password reset email"
+              >
                 Forgot password?
               </button>
             </div>
