@@ -1,6 +1,7 @@
 // utils/points.ts
 export type TeamName = "Arthur" | "Jimmy";
 
+
 export interface RecordRow {
   user_id: string;
   name: string;
