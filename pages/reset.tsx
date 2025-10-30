@@ -1,3 +1,4 @@
+// pages/reset.tsx
 import Head from "next/head";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
@@ -5,7 +6,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import { SITE_NAME } from "../utils/constants";
 
-/** Flip to `false` after you've finished debugging */
+/** Turn off after you’re done troubleshooting */
 const TEMP_DEBUG = true;
 
 function hasPkceVerifier(): boolean {
@@ -41,15 +42,31 @@ export default function Reset() {
       try {
         const url = new URL(window.location.href);
 
-        // 0) Surface any error Supabase appended
+        // Show any error passed back from Supabase
         const errCode = url.searchParams.get("error_code");
         const errDesc = url.searchParams.get("error_description");
         if (errCode || errDesc) {
           throw new Error(errDesc || errCode || "Invalid or expired reset link.");
         }
 
-        const type = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
+        // If you’re already signed in, just allow password change
+        const preSess = await supabase.auth.getSession();
+        const preUser = await supabase.auth.getUser();
+        if (TEMP_DEBUG) {
+          console.group("RESET DEBUG");
+          console.log("full URL:", url.toString());
+          console.log("query:", Object.fromEntries(url.searchParams.entries()));
+          console.log("NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+          console.log("pre.getSession:", preSess);
+          console.log("pre.getUser:", preUser);
+          console.groupEnd();
+        }
+        if (preSess.data.session?.user) {
+          setStage("ready");
+          return;
+        }
 
+        const type = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
         // Supabase may provide ?token_hash=... or ?token=...
         const tokenHash =
           url.searchParams.get("token_hash") ||
@@ -57,87 +74,56 @@ export default function Reset() {
           "";
         const code = url.searchParams.get("code") || "";
 
-        if (TEMP_DEBUG) {
-          // Safe debug logging
-          console.group("RESET DEBUG");
-          console.log("full URL:", url.toString());
-          console.log("query:", Object.fromEntries(url.searchParams.entries()));
-          console.log("NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-          const preSess = await supabase.auth.getSession();
-          console.log("pre.getSession:", preSess);
-          const preUser = await supabase.auth.getUser();
-          console.log("pre.getUser:", preUser);
-          console.groupEnd();
-        }
-
         let ok = false;
 
-        // 1) Preferred recovery path (password resets)
-        if (type === "recovery") {
-          if (!tokenHash) throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
+        // Preferred recovery path (password reset emails)
+        if (type === "recovery" && tokenHash) {
           const res1 = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
           if (TEMP_DEBUG) console.log("verifyOtp result:", res1);
           if (res1.error) throw res1.error;
           ok = true;
-        } else {
-          // 2) PKCE path (only if a verifier actually exists)
-          if (code && hasPkceVerifier()) {
-            const res2 = await supabase.auth.exchangeCodeForSession(code);
-            if (TEMP_DEBUG) console.log("exchangeCodeForSession result:", res2);
-            if (res2.error) {
-              // Try token fallback if present
-              if (tokenHash && type) {
-                const res3 = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-                if (TEMP_DEBUG) console.log("verifyOtp (fallback) result:", res3);
-                if (res3.error) throw res2.error; // keep original PKCE error
-                ok = true;
-              } else {
-                throw res2.error;
-              }
-            } else {
-              ok = true;
-            }
-          }
+        }
 
-          // 3) Token fallback if we didn’t already succeed and token exists
-          if (!ok && tokenHash && type) {
-            const res4 = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-            if (TEMP_DEBUG) console.log("verifyOtp (late) result:", res4);
-            if (res4.error) throw res4.error;
+        // PKCE code path (only if we actually have a stored verifier)
+        if (!ok && code && hasPkceVerifier()) {
+          const res2 = await supabase.auth.exchangeCodeForSession(code);
+          if (TEMP_DEBUG) console.log("exchangeCodeForSession result:", res2);
+          if (res2.error) throw res2.error;
+          ok = true;
+        }
+
+        // Legacy implicit hash fallback (#access_token, #refresh_token)
+        if (!ok && window.location.hash) {
+          const params = new URLSearchParams(window.location.hash.substring(1));
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+          if (access_token && refresh_token) {
+            const res3 = await supabase.auth.setSession({ access_token, refresh_token });
+            if (TEMP_DEBUG) console.log("setSession (legacy) result:", res3);
+            if (res3.error) throw res3.error;
             ok = true;
-          }
-
-          // 4) Legacy implicit flow via URL hash
-          if (!ok && window.location.hash) {
-            const params = new URLSearchParams(window.location.hash.substring(1));
-            const access_token = params.get("access_token");
-            const refresh_token = params.get("refresh_token");
-            if (access_token && refresh_token) {
-              const res5 = await supabase.auth.setSession({ access_token, refresh_token });
-              if (TEMP_DEBUG) console.log("setSession (legacy) result:", res5);
-              if (res5.error) throw res5.error;
-              ok = true;
-            }
           }
         }
 
-        // 5) Wait briefly for session population
+        // If we did any of the above, give the SDK a moment to populate session
         if (ok) {
           const ready = await waitForSession();
-          if (TEMP_DEBUG) {
-            const postSess = await supabase.auth.getSession();
-            console.log("post.getSession (final):", postSess);
-          }
           if (!ready) throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
+          setStage("ready");
+          return;
+        }
+
+        // If nothing matched, we still might allow password change if user ends up signed-in by the time this runs
+        const final = await supabase.auth.getSession();
+        if (final.data.session?.user) {
           setStage("ready");
           return;
         }
 
         throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
       } catch (e: any) {
-        const msg = String(e?.message || "");
         setStage("error");
-        setError(msg);
+        setError(String(e?.message || "Invalid or expired reset link. Try sending a new one from the login page."));
       }
     })();
   }, []);
