@@ -5,10 +5,31 @@ import { supabase } from "../lib/supabaseClient";
 import { SITE_NAME } from "../utils/constants";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
+function hasPkceVerifier(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || "";
+      if (k.startsWith("sb-pkce-code-verifier")) return true;
+    }
+  } catch {}
+  return false;
+}
+
+async function waitForSession(msTotal = 3000, step = 200) {
+  const tries = Math.ceil(msTotal / step);
+  for (let i = 0; i < tries; i++) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) return true;
+    await new Promise(r => setTimeout(r, step));
+  }
+  return false;
+}
+
 export default function Reset() {
   const router = useRouter();
-  const [stage, setStage] = useState<"checking"|"ready"|"done"|"error">("checking");
-  const [error, setError] = useState<string|null>(null);
+  const [stage, setStage] = useState<"checking" | "ready" | "done" | "error">("checking");
+  const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
 
@@ -16,39 +37,82 @@ export default function Reset() {
     (async () => {
       try {
         const url = new URL(window.location.href);
+
+        // Surface any error Supabase may append
+        const errCode = url.searchParams.get("error_code");
+        const errDesc = url.searchParams.get("error_description");
+        if (errCode || errDesc) {
+          throw new Error(errDesc || errCode || "Invalid or expired reset link.");
+        }
+
         const type = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
 
-        // Supabase sometimes sends ?token_hash=..., sometimes ?token=...
+        // Supabase may provide ?token_hash=... or ?token=...
         const tokenHash =
           url.searchParams.get("token_hash") ||
-          url.searchParams.get("token") || // <-- support this too
+          url.searchParams.get("token") ||
           "";
+        const code = url.searchParams.get("code") || "";
 
-        // Also support legacy implicit hash (#access_token & refresh_token)
         let ok = false;
 
+        // Preferred path for password reset
         if (type === "recovery") {
           if (!tokenHash) throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
           const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
           if (error) throw error;
           ok = true;
-        } else if (window.location.hash) {
-          const params = new URLSearchParams(window.location.hash.substring(1));
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
-          if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+        } else {
+          // PKCE only if a verifier is present
+          if (code && hasPkceVerifier()) {
+            const { error } = await supabase.auth.exchangeCodeForSession(code);
+            if (error) {
+              // try token fallback if present
+              if (tokenHash && type) {
+                const { error: vErr } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+                if (vErr) throw error;
+                ok = true;
+              } else {
+                throw error;
+              }
+            } else {
+              ok = true;
+            }
+          }
+
+          // token fallback if not ok yet
+          if (!ok && tokenHash && type) {
+            const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
             if (error) throw error;
             ok = true;
           }
+
+          // legacy implicit flow
+          if (!ok && window.location.hash) {
+            const params = new URLSearchParams(window.location.hash.substring(1));
+            const access_token = params.get("access_token");
+            const refresh_token = params.get("refresh_token");
+            if (access_token && refresh_token) {
+              const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+              if (error) throw error;
+              ok = true;
+            }
+          }
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (ok && session) setStage("ready");
-        else throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
+        // Wait briefly for session to populate
+        if (ok) {
+          const ready = await waitForSession();
+          if (!ready) throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
+          setStage("ready");
+          return;
+        }
+
+        throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
       } catch (e: any) {
+        const msg = String(e?.message || "");
         setStage("error");
-        setError(e?.message ?? "Invalid or expired reset link. Try sending a new one from the login page.");
+        setError(msg);
       }
     })();
   }, []);
@@ -70,8 +134,10 @@ export default function Reset() {
       <main className="min-h-screen grid place-items-center px-4">
         <div className="card max-w-md w-full">
           <h1 className="text-xl font-semibold mb-2">Set your password</h1>
+
           {stage === "checking" && <p className="text-sm text-gray-600">Preparing your reset session…</p>}
           {stage === "error" && <p className="text-sm text-red-600">{error || "Invalid or expired reset link. Try sending a new one from the login page."}</p>}
+
           {stage === "ready" && (
             <form onSubmit={submit} className="grid grid-cols-1 gap-3">
               <div>
@@ -86,6 +152,7 @@ export default function Reset() {
               {error && <p className="text-sm text-red-600">{error}</p>}
             </form>
           )}
+
           {stage === "done" && <p className="text-sm text-green-700">Password saved. Redirecting…</p>}
         </div>
       </main>
