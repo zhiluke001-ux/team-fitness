@@ -5,6 +5,17 @@ import { supabase } from "../lib/supabaseClient";
 import { SITE_NAME } from "../utils/constants";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
+function hasPkceVerifier(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || "";
+      if (k.startsWith("sb-pkce-code-verifier")) return true;
+    }
+  } catch {}
+  return false;
+}
+
 export default function Reset() {
   const router = useRouter();
   const [stage, setStage] = useState<"checking" | "ready" | "done" | "error">("checking");
@@ -16,42 +27,53 @@ export default function Reset() {
     (async () => {
       try {
         const url = new URL(window.location.href);
-        const code = url.searchParams.get("code");
-        const tokenHash = url.searchParams.get("token_hash");
+        const code = url.searchParams.get("code") || "";
+        const tokenHash = url.searchParams.get("token_hash") || "";
         const type = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
 
         let ok = false;
 
-        // 1) Try new PKCE flow first
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (!error) ok = true;
-          else {
-            // 2) If PKCE verifier is missing/mismatched, try token_hash fallback if present
-            if (tokenHash && type) {
-              const { error: vErr } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-              if (!vErr) ok = true;
-              else throw error; // keep original error context
+        // ⚠️ Password reset should use recovery flow. If type=recovery, prefer verifyOtp.
+        if (type === "recovery") {
+          if (!tokenHash) throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
+          const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+          if (error) throw error;
+          ok = true;
+        } else {
+          // Only attempt PKCE if we actually have a stored code_verifier.
+          if (code && hasPkceVerifier()) {
+            const { error } = await supabase.auth.exchangeCodeForSession(code);
+            if (error) {
+              // Fall back to token_hash path if available
+              if (tokenHash && type) {
+                const { error: vErr } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+                if (vErr) throw error; // keep original PKCE error if fallback also fails
+                ok = true;
+              } else {
+                throw error;
+              }
             } else {
-              throw error;
+              ok = true;
             }
           }
-        }
 
-        // 3) If no code, try token_hash directly
-        if (!ok && tokenHash && type) {
-          const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-          if (!error) ok = true;
-        }
+          // Try token_hash if we didn't already succeed and it exists
+          if (!ok && tokenHash && type) {
+            const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+            if (error) throw error;
+            ok = true;
+          }
 
-        // 4) Legacy implicit hash flow
-        if (!ok && window.location.hash) {
-          const params = new URLSearchParams(window.location.hash.substring(1));
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
-          if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-            if (!error) ok = true;
+          // Legacy implicit hash fallback
+          if (!ok && window.location.hash) {
+            const params = new URLSearchParams(window.location.hash.substring(1));
+            const access_token = params.get("access_token");
+            const refresh_token = params.get("refresh_token");
+            if (access_token && refresh_token) {
+              const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+              if (error) throw error;
+              ok = true;
+            }
           }
         }
 
@@ -60,10 +82,11 @@ export default function Reset() {
         else throw new Error("Invalid or expired reset link. Try sending a new one from the login page.");
       } catch (e: any) {
         setStage("error");
+        const msg = String(e?.message || "");
         setError(
-          e?.message?.includes("code challenge")
-            ? "This link was opened in a different browser or the request expired. Send a new reset link and open it in the same browser you requested it from."
-            : e?.message ?? "Invalid or expired reset link. Try sending a new one from the login page."
+          /code.*verifier/i.test(msg)
+            ? "This link expects a PKCE verifier that isn't present. Please send a new reset link and open it in the same browser you requested it from."
+            : msg || "Invalid or expired reset link. Try sending a new one from the login page."
         );
       }
     })();
@@ -90,34 +113,17 @@ export default function Reset() {
           <h1 className="text-xl font-semibold mb-2">Set your password</h1>
 
           {stage === "checking" && <p className="text-sm text-gray-600">Preparing your reset session…</p>}
-
-          {stage === "error" && (
-            <p className="text-sm text-red-600">
-              {error || "Invalid or expired reset link. Try sending a new one from the login page."}
-            </p>
-          )}
+          {stage === "error" && <p className="text-sm text-red-600">{error || "Invalid or expired reset link. Try sending a new one from the login page."}</p>}
 
           {stage === "ready" && (
             <form onSubmit={submit} className="grid grid-cols-1 gap-3">
               <div>
                 <label className="label">New password</label>
-                <input
-                  type="password"
-                  required
-                  className="input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <input type="password" required className="input" value={password} onChange={(e)=>setPassword(e.target.value)} />
               </div>
               <div>
                 <label className="label">Confirm password</label>
-                <input
-                  type="password"
-                  required
-                  className="input"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                />
+                <input type="password" required className="input" value={confirm} onChange={(e)=>setConfirm(e.target.value)} />
               </div>
               <button className="btn btn-primary btn-compact" type="submit">Save password</button>
               {error && <p className="text-sm text-red-600">{error}</p>}
