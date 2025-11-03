@@ -21,7 +21,6 @@ export default function Login() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // ensure we don't double-run auto sign-in
   const autoTriedRef = useRef(false);
 
   const redirectOrigin = useMemo(() => {
@@ -29,7 +28,6 @@ export default function Login() {
     return process.env.NEXT_PUBLIC_SITE_URL || "";
   }, []);
 
-  // Helper: persist or clear remembered creds
   function persistRemember(e: string, p: string, auto: boolean) {
     try {
       if (remember && typeof window !== "undefined") {
@@ -38,12 +36,9 @@ export default function Login() {
       } else if (typeof window !== "undefined") {
         localStorage.removeItem(REMEMBER_KEY);
       }
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 
-  // Helper: direct sign-in with explicit creds (used by auto sign-in)
   async function directSignIn(e: string, p: string) {
     if (!e || !p) {
       setErr("Saved credentials incomplete. Please sign in manually once.");
@@ -66,27 +61,22 @@ export default function Login() {
 
   useEffect(() => {
     (async () => {
-      // already signed in?
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
         router.replace(nextParam || "/");
         return;
       }
 
-      // If we just signed out, skip auto once
       const skipAuto = typeof window !== "undefined" && sessionStorage.getItem("atag-skip-auto") === "1";
       if (skipAuto && typeof window !== "undefined") {
         sessionStorage.removeItem("atag-skip-auto");
       }
 
-      // load remembered creds
       const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
       if (raw) {
         const saved = JSON.parse(raw) as RememberPayload | null;
         if (saved?.email) setEmail(saved.email);
         if (saved?.password) setPassword(saved.password);
-
-        // only auto if not skipping and flag is true
         if (!skipAuto && saved?.autoSignIn && saved.email && saved.password && !autoTriedRef.current) {
           autoTriedRef.current = true;
           setTimeout(() => directSignIn(saved.email!, saved.password!), 100);
@@ -117,8 +107,21 @@ export default function Login() {
     }
   }
 
-  // Forgot password — send a **recovery** link only (no signUp fallback).
-  // This prevents PKCE "code challenge does not match" issues.
+  // Generate a random temporary password for sign-up fallback
+  function genTempPassword() {
+    try {
+      const arr = new Uint8Array(16);
+      if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+        window.crypto.getRandomValues(arr);
+        return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+      }
+    } catch {}
+    return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  }
+
+  // Forgot password → dual-path:
+  // - Existing users: resetPasswordForEmail → /reset
+  // - New users: signUp(temp) → confirm email → /reset?new=1
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
     if (!email) {
@@ -129,19 +132,56 @@ export default function Login() {
     setMsg(null);
     setBusy(true);
 
+    const resetRedirect = `${redirectOrigin}/reset`;
+    const confirmRedirect = `${redirectOrigin}/reset?new=1`;
+
+    let resetOk = false;
+    let signupOk = false;
+
     try {
-      const resetRedirect = `${redirectOrigin}/reset`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      // A) try reset for existing accounts
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: resetRedirect,
       });
-      if (error) throw error;
+      if (!resetErr) resetOk = true;
+    } catch {}
 
-      setMsg("We’ve emailed you a secure link to set your password. Open it in this same browser.");
-    } catch (ex: any) {
-      setErr(ex?.message || "We couldn't send the email. Please try again later.");
-    } finally {
-      setBusy(false);
+    try {
+      // B) try sign-up for new accounts (will send confirm email)
+      const tempPassword = genTempPassword();
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email,
+        password: tempPassword,
+        options: { emailRedirectTo: confirmRedirect },
+      });
+      if (!signUpErr) {
+        signupOk = true;
+      } else {
+        // ignore "already registered" type messages
+        const m = (signUpErr.message || "").toLowerCase();
+        if (
+          signUpErr.status === 422 ||
+          m.includes("already registered") ||
+          m.includes("already exists") ||
+          m.includes("user exists")
+        ) {
+          // user already exists → reset path will cover them
+        } else {
+          // other signUp errors are non-fatal; we still rely on resetOk if true
+        }
+      }
+    } catch {}
+
+    setBusy(false);
+
+    if (resetOk || signupOk) {
+      setMsg(
+        "If your email is registered, you’ll get a reset link. If it’s new, you’ll get a confirm link to finish creating your account. Open it in this same browser."
+      );
+      return;
     }
+
+    setErr("We couldn't send the email. Check your email settings and try again.");
   }
 
   return (
@@ -210,7 +250,7 @@ export default function Login() {
                 onClick={sendPasswordSetup}
                 disabled={!email || busy}
                 type="button"
-                title="Send a password reset email"
+                title="Send a reset/confirm email"
               >
                 Forgot password?
               </button>
