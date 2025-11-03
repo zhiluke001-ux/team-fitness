@@ -6,19 +6,8 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import { SITE_NAME } from "../utils/constants";
 
-/** Flip to false after you finish troubleshooting */
+/** Turn off after troubleshooting */
 const TEMP_DEBUG = true;
-
-function hasPkceVerifier(): boolean {
-  try {
-    if (typeof window === "undefined") return false;
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i) || "";
-      if (k.startsWith("sb-pkce-code-verifier")) return true;
-    }
-  } catch {}
-  return false;
-}
 
 async function waitForSession(msTotal = 3500, step = 200) {
   const tries = Math.ceil(msTotal / step);
@@ -36,16 +25,13 @@ export default function Reset() {
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [welcome, setWelcome] = useState(false); // show “welcome” banner for new signups
+  const [welcome, setWelcome] = useState(false); // show for first-time signup flow
 
-  // Memoized helper to read current URL safely in CSR
+  // for safe console printing
   const urlInfo = useMemo(() => {
     if (typeof window === "undefined") return null;
     const u = new URL(window.location.href);
-    return {
-      full: u.toString(),
-      params: u.searchParams,
-    };
+    return { full: u.toString(), params: u.searchParams };
   }, [typeof window !== "undefined" ? window.location.href : ""]);
 
   useEffect(() => {
@@ -53,15 +39,19 @@ export default function Reset() {
       try {
         const url = new URL(window.location.href);
 
-        // Surface error from Supabase (e.g., invalid/expired)
+        // If Supabase returned explicit error
         const errCode = url.searchParams.get("error_code");
         const errDesc = url.searchParams.get("error_description");
         if (errCode || errDesc) throw new Error(errDesc || errCode || "Invalid or expired link.");
 
-        // If already signed in, allow password change immediately
-        const preSess = await supabase.auth.getSession();
-        const preUser = await supabase.auth.getUser();
+        // Show welcome note for signup confirmations
+        const qNew = url.searchParams.get("new") === "1";
+        const qType = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
+        if (qNew || qType === "signup") setWelcome(true);
 
+        // Log pre-state
+        const preSess = await supabase.auth.getSession();
+        const preUser = await supabase.auth.getUser(); // may return AuthSessionMissingError if not signed in (safe to ignore)
         if (TEMP_DEBUG) {
           console.group("RESET DEBUG");
           console.log("full URL:", url.toString());
@@ -72,11 +62,7 @@ export default function Reset() {
           console.groupEnd();
         }
 
-        // Decide whether to show welcome note (signup flow)
-        const qNew = url.searchParams.get("new") === "1";
-        const qType = (url.searchParams.get("type") as EmailOtpType | null) ?? null;
-        if (qNew || qType === "signup") setWelcome(true);
-
+        // If already signed in, go straight to password form
         if (preSess.data.session?.user) {
           setStage("ready");
           return;
@@ -91,24 +77,31 @@ export default function Reset() {
 
         let ok = false;
 
-        // 1) Verify typed tokens: recovery/signup/email_change/invite
+        // 1) Prefer typed verification (recovery / signup / invite / email_change / magiclink)
         if (!ok && tokenHash && qType) {
-          // Supabase accepts: 'recovery' | 'signup' | 'email_change' | 'invite' | 'magiclink'
           const { error } = await supabase.auth.verifyOtp({ type: qType, token_hash: tokenHash });
           if (TEMP_DEBUG) console.log("verifyOtp:", { type: qType, tokenHash: tokenHash.slice(0, 8) + "…" }, "error:", error);
           if (error) throw error;
           ok = true;
         }
 
-        // 2) PKCE code → exchange only if a verifier exists
-        if (!ok && code && hasPkceVerifier()) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (TEMP_DEBUG) console.log("exchangeCodeForSession error:", error);
-          if (error) throw error;
+        // 2) If we have a PKCE code, ALWAYS try to exchange it (no localStorage gate)
+        if (!ok && code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (TEMP_DEBUG) console.log("exchangeCodeForSession:", { data, error });
+          if (error) {
+            // surface a clearer message for the common verifier mismatch/missing cases
+            const msg = (error.message || "").toLowerCase();
+            const hint =
+              msg.includes("code_verifier") || msg.includes("verifier") || msg.includes("pkce")
+                ? "This confirmation link couldn’t be verified in this browser session. Please request a new email and open it in the same browser you used to click “Forgot password”."
+                : error.message;
+            throw new Error(hint || "Could not verify the confirmation code.");
+          }
           ok = true;
         }
 
-        // 3) Legacy implicit hash (#access_token & #refresh_token)
+        // 3) Legacy implicit flow via URL hash (#access_token & #refresh_token)
         if (!ok && window.location.hash) {
           const params = new URLSearchParams(window.location.hash.substring(1));
           const access_token = params.get("access_token");
@@ -126,7 +119,7 @@ export default function Reset() {
           }
         }
 
-        // Wait briefly for the SDK to populate session
+        // Wait for session population
         if (ok) {
           const ready = await waitForSession();
           if (!ready) throw new Error("Invalid or expired link. Try sending a new one.");
@@ -134,7 +127,7 @@ export default function Reset() {
           return;
         }
 
-        // Final check in case session arrived late
+        // Final chance
         const final = await supabase.auth.getSession();
         if (final.data.session?.user) {
           setStage("ready");
@@ -159,7 +152,7 @@ export default function Reset() {
     if (error) return setError(error.message);
 
     setStage("done");
-    // After setting password, send user home; onboarding there will create profile (name + team)
+    // After saving password, index page will drive onboarding (display name + team)
     setTimeout(() => router.replace("/"), 800);
   }
 
