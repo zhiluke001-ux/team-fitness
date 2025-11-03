@@ -66,12 +66,10 @@ export default function Login() {
         router.replace(nextParam || "/");
         return;
       }
-
       const skipAuto = typeof window !== "undefined" && sessionStorage.getItem("atag-skip-auto") === "1";
       if (skipAuto && typeof window !== "undefined") {
         sessionStorage.removeItem("atag-skip-auto");
       }
-
       const raw = typeof window !== "undefined" ? localStorage.getItem(REMEMBER_KEY) : null;
       if (raw) {
         const saved = JSON.parse(raw) as RememberPayload | null;
@@ -107,21 +105,36 @@ export default function Login() {
     }
   }
 
-  // Generate a random temporary password for sign-up fallback
+  // Helpers for the Forgot Password button
+  function clearPkceVerifiers() {
+    try {
+      if (typeof window === "undefined") return;
+      const keys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i) || "";
+        if (k.startsWith("sb-pkce-code-verifier")) keys.push(k);
+      }
+      keys.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+  }
+
   function genTempPassword() {
     try {
       const arr = new Uint8Array(16);
       if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
         window.crypto.getRandomValues(arr);
-        return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+        return Array.from(arr).map((b) => b.toString(16).padStart(2, "0")).join("");
       }
     } catch {}
     return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   }
 
-  // Forgot password → dual-path:
-  // - Existing users: resetPasswordForEmail → /reset
-  // - New users: signUp(temp) → confirm email → /reset?new=1
+  /**
+   * Forgot password → ONE flow only:
+   * 1) Try signUp first (creates new users). If success ⇒ email sent (confirm link) → /reset?new=1
+   * 2) If signUp says "already registered" ⇒ clear PKCE, then send resetPasswordForEmail → /reset
+   * This guarantees the PKCE code_verifier in localStorage matches the LAST email we send.
+   */
   async function sendPasswordSetup(e: React.FormEvent) {
     e.preventDefault();
     if (!email) {
@@ -132,56 +145,58 @@ export default function Login() {
     setMsg(null);
     setBusy(true);
 
-    const resetRedirect = `${redirectOrigin}/reset`;
     const confirmRedirect = `${redirectOrigin}/reset?new=1`;
-
-    let resetOk = false;
-    let signupOk = false;
+    const resetRedirect = `${redirectOrigin}/reset`;
 
     try {
-      // A) try reset for existing accounts
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: resetRedirect,
-      });
-      if (!resetErr) resetOk = true;
-    } catch {}
+      // Step 1: start fresh PKCE state
+      clearPkceVerifiers();
 
-    try {
-      // B) try sign-up for new accounts (will send confirm email)
+      // A) Try to sign up (covers NEW users)
       const tempPassword = genTempPassword();
       const { error: signUpErr } = await supabase.auth.signUp({
         email,
         password: tempPassword,
         options: { emailRedirectTo: confirmRedirect },
       });
+
       if (!signUpErr) {
-        signupOk = true;
-      } else {
-        // ignore "already registered" type messages
-        const m = (signUpErr.message || "").toLowerCase();
-        if (
-          signUpErr.status === 422 ||
-          m.includes("already registered") ||
-          m.includes("already exists") ||
-          m.includes("user exists")
-        ) {
-          // user already exists → reset path will cover them
-        } else {
-          // other signUp errors are non-fatal; we still rely on resetOk if true
-        }
+        // New user flow: only one email was sent (PKCE verifier set for this flow)
+        setMsg(
+          "Check your email for a confirmation link to create your account. Open it in this same browser, then set your password."
+        );
+        setBusy(false);
+        return;
       }
-    } catch {}
 
-    setBusy(false);
+      // If user already exists, fall back to RESET flow
+      const msgLow = (signUpErr.message || "").toLowerCase();
+      const already =
+        signUpErr.status === 422 ||
+        msgLow.includes("already") ||
+        msgLow.includes("exists") ||
+        msgLow.includes("registered");
 
-    if (resetOk || signupOk) {
+      if (!already) {
+        // Some other signUp error — surface it
+        throw signUpErr;
+      }
+
+      // B) Existing user: reset password (SECOND and only flow now)
+      clearPkceVerifiers(); // ensure verifier belongs to the reset flow we’re about to start
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: resetRedirect,
+      });
+      if (resetErr) throw resetErr;
+
       setMsg(
-        "If your email is registered, you’ll get a reset link. If it’s new, you’ll get a confirm link to finish creating your account. Open it in this same browser."
+        "We’ve emailed you a reset link. Open it in this same browser to set your password."
       );
-      return;
+      setBusy(false);
+    } catch (ex: any) {
+      setBusy(false);
+      setErr(ex?.message || "We couldn't send the email. Please try again later.");
     }
-
-    setErr("We couldn't send the email. Check your email settings and try again.");
   }
 
   return (
@@ -250,7 +265,7 @@ export default function Login() {
                 onClick={sendPasswordSetup}
                 disabled={!email || busy}
                 type="button"
-                title="Send a reset/confirm email"
+                title="Send a sign-up (new) or reset (existing) email"
               >
                 Forgot password?
               </button>
